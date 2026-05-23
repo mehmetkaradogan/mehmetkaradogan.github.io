@@ -1,0 +1,24 @@
+---
+title: "LangGraph üretim için fiili kazanan: BlackRock ve JPMorgan kullanımı doğrulandı"
+slug: langgraph-uretim-kazanani
+category: haberler
+level: orta
+summary: "LangGraph'ın BlackRock ve JPMorgan gibi büyük finans kurumlarında üretime alındığı doğrulandı. LangSmith entegrasyonu, denetlenebilirlik gerektiren sektörlerde tercih sebebi olmaya devam ediyor."
+updated: 2026-05-23
+date: 2026-05-09
+source: "langchain-blog"
+newsType: update
+tags: ["langgraph", "uretim", "fintech", "gozlemlenebilirlik", "langsmith"]
+related: ["langgraph"]
+tools: ["langgraph", "langsmith"]
+---
+
+**Ne değişti:** LangChain ekibi, LangGraph'ın kurumsal üretim ortamlarındaki kullanımını gösteren vaka çalışmaları yayınladı. Finans sektöründen **BlackRock** ve **JPMorgan**, LangGraph tabanlı ajan sistemlerini üretime taşıdıklarını doğruladı. Bu sistemlerde ortak özellikler: durumlu grafik (stateful graph) mimarisi, LangSmith ile tam gözlemlenebilirlik (observability), checkpoint ile dayanıklılık (durability) ve insan onayı (HITL) adımları. LangGraph 0.3 sürümü aynı dönemde yayınlandı; bu sürümde paralel node çalıştırma performansı iyileştirildi.
+
+**Etkisi:** Regülasyonlu sektörlerde (finans, sağlık, hukuk) LangGraph'ın öne çıkmasının temel nedeni, her ajan adımının iz kaydı (trace), hata ayıklama ve denetim (audit) için LangSmith üzerinden erişilebilir olması. Birden fazla kurumsal müşterinin üretim tercihi, LangGraph'ı "üretim için fiili çerçeve" konumuna taşıdı. CrewAI prototip ve küçük-orta ölçekli ekiplerde öne çıkarken, LangGraph denetlenebilirlik gerektiren büyük projelerde kazanıyor.
+
+**Detay:** LangGraph ile ilk adımlar için [/modul/04-langgraph-baslangic](/modul/04-langgraph-baslangic) modülünü inceleyin. CrewAI ile karşılaştırma için [/karsilastirmalar/langgraph-vs-crewai-vs-autogen](/karsilastirmalar/langgraph-vs-crewai-vs-autogen) sayfasına bakın. Tam araç incelemesi: [/araclar/langgraph](/araclar/langgraph).
+
+<Callout type="ipucu">
+LangGraph'ı değerlendirirken LangSmith maliyetini de hesaba katın. Ücretsiz kademede trace limiti var; büyük ölçekli üretim için ücretli plan gerekebilir. Alternatif olarak self-hosted Langfuse ile LangGraph entegre edilebilir.
+</Callout>

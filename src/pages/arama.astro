@@ -1,0 +1,71 @@
+---
+// src/pages/arama.astro
+// Full Pagefind search UI page.
+
+import BaseLayout from '@layouts/BaseLayout.astro';
+import Breadcrumb from '@components/Breadcrumb.astro';
+---
+
+<BaseLayout
+  title="Arama"
+  description="Agentic AI Öğrenme Merkezi içinde arama yapın."
+>
+  <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <Breadcrumb crumbs={[{ label: 'Arama' }]} />
+
+    <header class="mb-8">
+      <h1 class="text-3xl font-bold mb-3" style="color: var(--text-primary);">Site İçi Arama</h1>
+      <p class="text-base" style="color: var(--text-secondary);">
+        Tüm kavramlar, araçlar, modüller ve senaryolarda arama yapın.
+        Hızlı erişim için <kbd class="px-1.5 py-0.5 rounded text-xs font-mono" style="border: 1px solid var(--border-color); background-color: var(--bg-subtle);">Ctrl+K</kbd> kısayolunu kullanabilirsiniz.
+      </p>
+    </header>
+
+    <!-- Pagefind UI -->
+    <div
+      id="pagefind-full"
+      class="rounded-xl border p-6"
+      style="background-color: var(--bg-surface); border-color: var(--border-color);"
+    >
+      <p id="arama-loading" class="text-sm text-center py-8" style="color: var(--text-muted);">
+        Arama yükleniyor&hellip;
+      </p>
+    </div>
+  </div>
+</BaseLayout>
+
+<link rel="stylesheet" href="/pagefind/pagefind-ui.css" />
+
+<script>
+  function initFullSearch() {
+    const container = document.getElementById('pagefind-full');
+    if (!container) return;
+
+    const script = document.createElement('script');
+    script.src = '/pagefind/pagefind-ui.js';
+    script.onload = () => {
+      document.getElementById('arama-loading')?.remove();
+      // @ts-ignore
+      if (typeof PagefindUI !== 'undefined') {
+        // @ts-ignore
+        new PagefindUI({
+          element: '#pagefind-full',
+          showImages: false,
+          resetStyles: false,
+          translations: {
+            placeholder: 'Aramak istediğiniz kelimeyi yazın...',
+            zero_results: '[QUERY] için sonuç bulunamadı.',
+          },
+        });
+      }
+    };
+    script.onerror = () => {
+      const loading = document.getElementById('arama-loading');
+      if (loading) loading.textContent = 'Arama servisi şu an kullanılamıyor (geliştirme modu). npm run build sonrasında çalışır.';
+    };
+    document.head.appendChild(script);
+  }
+
+  initFullSearch();
+  document.addEventListener('astro:after-swap', initFullSearch);
+</script>

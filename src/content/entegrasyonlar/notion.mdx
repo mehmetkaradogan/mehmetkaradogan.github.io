@@ -1,0 +1,243 @@
+---
+title: "Notion Entegrasyonu"
+slug: notion
+category: entegrasyonlar
+level: orta
+summary: "Agent'larınızı Notion veritabanlarıyla entegre edin. Resmi MCP sunucusu kurulumu, sayfa okuma/yazma, veritabanı sorgulama ve içerik üretim otomasyonu."
+updated: 2026-05-23
+tags: ["notion", "mcp", "veritabani", "icerik-uretimi", "otomasyon"]
+related: ["mcp-sunucu-listesi", "obsidian", "airtable"]
+---
+
+## Ne İşe Yarar?
+
+**Notion**, sayfa, veritabanı ve wiki yapısını bir arada sunan bir bilgi yönetim platformudur. Agent entegrasyonu şu olanakları sağlar:
+
+- Veritabanı kayıtlarını okuma, filtreleme ve oluşturma.
+- Sayfa içeriği yazma ve güncelleme.
+- CRM, proje takibi, içerik takvimi gibi iş akışlarını otomatikleştirme.
+- Notion'ı agent'ın uzun vadeli belleği (long-term memory) olarak kullanma.
+
+<Callout type="info">
+Notion, Anthropic ile iş birliği yaparak resmi bir MCP sunucusu yayınlamıştır. Bu, en kararlı ve güncel entegrasyon yoludur.
+</Callout>
+
+---
+
+## Kurulum ve Bağlantı
+
+### Seçenek A — Resmi Notion MCP Sunucusu (Önerilen)
+
+**Gereksinimler:**
+1. Bir Notion hesabı ve çalışma alanı (workspace).
+2. Notion Integration Token — [https://www.notion.so/my-integrations](https://www.notion.so/my-integrations) adresinden yeni bir entegrasyon oluşturun.
+3. Erişim vermek istediğiniz sayfaları veya veritabanlarını entegrasyonla paylaşın (sayfada "..." → "Connect to" → entegrasyon adı).
+
+```bash
+npx @notionhq/notion-mcp-server
+```
+
+Claude Code yapılandırması:
+
+```json
+{
+  "mcpServers": {
+    "notion": {
+      "command": "npx",
+      "args": ["-y", "@notionhq/notion-mcp-server"],
+      "env": {
+        "NOTION_API_KEY": "secret_xxxxxxxxxxxxxxxxxxxx"
+      }
+    }
+  }
+}
+```
+
+### Seçenek B — Notion Python SDK ile Doğrudan Kullanım
+
+```bash
+pip install notion-client
+```
+
+```python
+from notion_client import Client
+
+notion = Client(auth="secret_xxxxxxxxxxxxxxxxxxxx")
+
+def get_database_items(database_id: str, filter_prop: str = None) -> list[dict]:
+    """Notion veritabanından kayıtları çeker."""
+    query_params = {"database_id": database_id}
+    response = notion.databases.query(**query_params)
+    return response["results"]
+
+def create_page(parent_id: str, title: str, content: str) -> str:
+    """Belirtilen üst sayfanın altına yeni sayfa oluşturur."""
+    new_page = notion.pages.create(
+        parent={"page_id": parent_id},
+        properties={
+            "title": {"title": [{"text": {"content": title}}]}
+        },
+        children=[
+            {
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {
+                    "rich_text": [{"type": "text", "text": {"content": content}}]
+                },
+            }
+        ],
+    )
+    return new_page["id"]
+```
+
+---
+
+## Pratik Senaryolar
+
+### Senaryo 1 — İçerik Takvimi Otomasyonu
+
+Blog yazısı fikirleri veritabanındaki taslakları alan ve her biri için otomatik içerik üretip Notion'a geri yazan agent:
+
+```python
+import anthropic
+from notion_client import Client
+
+client_ai = anthropic.Anthropic()
+notion = Client(auth="secret_xxxxxxxxxxxxxxxxxxxx")
+
+CONTENT_DB_ID = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+def draft_blog_post(topic: str, audience: str) -> str:
+    response = client_ai.messages.create(
+        model="claude-sonnet-4-5",
+        max_tokens=2000,
+        messages=[
+            {
+                "role": "user",
+                "content": (
+                    f"'{topic}' konusunda {audience} hedef kitlesine yönelik "
+                    "bir blog yazısı taslağı yaz. Türkçe, akıcı ve bilgilendirici olsun. "
+                    "Giriş, 3 ana bölüm ve sonuç içersin."
+                ),
+            }
+        ],
+    )
+    return response.content[0].text
+
+def process_drafts():
+    # Durum "Taslak" olan kayıtları getir
+    results = notion.databases.query(
+        database_id=CONTENT_DB_ID,
+        filter={"property": "Durum", "select": {"equals": "Taslak"}},
+    )
+    for page in results["results"]:
+        props = page["properties"]
+        topic = props["Konu"]["title"][0]["text"]["content"]
+        audience = props.get("Hedef Kitle", {}).get("rich_text", [{}])[0].get(
+            "text", {}
+        ).get("content", "geliştiriciler")
+
+        draft = draft_blog_post(topic, audience)
+
+        # Notion sayfasını güncelle
+        notion.blocks.children.append(
+            block_id=page["id"],
+            children=[
+                {
+                    "object": "block",
+                    "type": "paragraph",
+                    "paragraph": {
+                        "rich_text": [{"type": "text", "text": {"content": draft}}]
+                    },
+                }
+            ],
+        )
+        # Durumu güncelle
+        notion.pages.update(
+            page_id=page["id"],
+            properties={"Durum": {"select": {"name": "AI Taslağı Hazır"}}},
+        )
+        print(f"Tamamlandı: {topic}")
+
+process_drafts()
+```
+
+### Senaryo 2 — CRM Kaydı Zenginleştirme
+
+Notion CRM veritabanındaki müşteri kayıtlarına araştırma notları ekleyen agent:
+
+```python
+def enrich_contact(contact_name: str, company: str) -> str:
+    response = client_ai.messages.create(
+        model="claude-haiku-4-5",
+        max_tokens=500,
+        messages=[
+            {
+                "role": "user",
+                "content": (
+                    f"{company} şirketindeki {contact_name} ile ilgili "
+                    "bir iletişim öncesi hazırlık özeti yaz. "
+                    "Şirketin sektörünü, büyüklüğünü ve olası ihtiyaçlarını tahmin et."
+                ),
+            }
+        ],
+    )
+    return response.content[0].text
+```
+
+### Senaryo 3 — Toplantı Notu Yapılandırma
+
+Ham toplantı notunu Notion şablonuna dönüştürme:
+
+```python
+def structure_meeting_notes(raw_notes: str, page_id: str) -> None:
+    """Ham toplantı notlarını yapılandırılmış Notion bloklarına dönüştürür."""
+    response = client_ai.messages.create(
+        model="claude-sonnet-4-5",
+        max_tokens=1000,
+        messages=[
+            {
+                "role": "user",
+                "content": (
+                    "Aşağıdaki ham toplantı notlarını yapılandır. "
+                    "Şu bölümleri oluştur: Katılımcılar, Tartışılan Konular, "
+                    "Alınan Kararlar, Aksiyon Maddeleri (sahip + son tarih).\n\n"
+                    f"{raw_notes}"
+                ),
+            }
+        ],
+    )
+    structured = response.content[0].text
+    notion.blocks.children.append(
+        block_id=page_id,
+        children=[
+            {
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {
+                    "rich_text": [{"type": "text", "text": {"content": structured}}]
+                },
+            }
+        ],
+    )
+```
+
+---
+
+## Yaygın Sorunlar
+
+| Sorun | Neden | Çözüm |
+|---|---|---|
+| `APIResponseError: Could not find page` | Entegrasyon sayfaya erişim izni yok | Notion'da sayfayı açın → "..." → "Connect to" → entegrasyonu seçin |
+| `Unauthorized` hatası | API anahtarı yanlış veya süresi dolmuş | [notion.so/my-integrations](https://www.notion.so/my-integrations) → yeni secret oluşturun |
+| Veritabanı şeması uyuşmuyor | Özellik (property) adı değişmiş | `notion.databases.retrieve(db_id)` ile güncel şemayı kontrol edin |
+| İçerik 2000 karakteri aşıyor | Notion blok sınırı | İçeriği birden fazla paragraf bloğuna bölün |
+
+---
+
+## İlgili Sayfalar
+
+- [İcerik Uretimi Senaryosu](/senaryolar/icerik-uretimi)
+- [Kisisel Bilgi Yonetimi Senaryosu](/senaryolar/kisisel-bilgi-yonetimi)
+- [MCP Sunucu Listesi](/entegrasyonlar/mcp-sunucu-listesi)
+- [Airtable Entegrasyonu](/entegrasyonlar/airtable)

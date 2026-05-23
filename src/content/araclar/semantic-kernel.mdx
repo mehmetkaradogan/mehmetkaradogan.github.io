@@ -1,0 +1,253 @@
+---
+title: "Semantic Kernel"
+slug: semantic-kernel
+category: araclar
+level: ileri
+summary: "Microsoft'un kurumsal yapay zeka entegrasyon çerçevesi; .NET, Python ve Java desteğiyle Azure ekosistemiyle sıkı entegrasyon sunar ve AutoGen'in önerilen halefidir."
+updated: 2026-05-23
+tags: ["framework", "microsoft", "dotnet", "kurumsal", "azure"]
+related: ["autogen", "langgraph", "openai-agents-sdk"]
+vendor: "Microsoft"
+toolType: "framework"
+license: "MIT (açık kaynak)"
+os: ["macOS", "Linux", "Windows"]
+primary_model: "GPT-4o / Azure OpenAI (Claude ve Gemini de desteklenir)"
+last_review: 2026-05-23
+status: "active"
+---
+
+## Nedir?
+
+Semantic Kernel, Microsoft tarafından geliştirilen, kurumsal (enterprise) yapay zeka uygulamalarına odaklanan açık kaynak bir LLM orkestrasyon çerçevesidir (LLM orchestration framework). .NET, Python ve Java'yı destekleyen nadir çerçevelerden biri olarak özellikle .NET ekosisteminde çalışan kurumsal geliştirici ekiplerine hitap eder. Plugin (eklenti) mimarisiyle mevcut iş uygulamalarına AI yetenekleri eklemeyi, Planner bileşeniyle görevleri otomatik planlayıp yürütmeyi ve Azure AI Studio, Azure OpenAI Service ile derin entegrasyon sağlamayı mümkün kılar. AutoGen bakım moduna alındıktan sonra Microsoft, Agent Framework ihtiyaçları için Semantic Kernel'ı öne çıkarmaktadır.
+
+## Ne için iyi
+
+- **.NET / C# ekipleri:** Python baskın çerçevelere alternatif; .NET projesine doğrudan entegrasyon.
+- **Azure ekosistemi:** Azure OpenAI, Azure AI Search, Azure Cognitive Services ile yerel entegrasyon.
+- **Kurumsal güvenlik:** Microsoft'un kurumsal güvenlik standartlarına (RBAC, audit log, compliance) uygun mimari.
+- **Plugin mimarisi:** Mevcut .NET servislerini, REST API'leri ve veritabanlarını AI'ya açma.
+- **AutoGen'den geçiş:** AutoGen bakım modu ile Microsoft'un önerdiği geçiş yolu.
+- **Planner bileşeni:** Görev planlamayı otomatikleştiren yapı — kullanıcı niyet, Planner araç seçer.
+
+## Ne için kötü
+
+- **Python-first ekipler:** LangGraph ve CrewAI Python ekosistemi için çok daha zengin.
+- **Hızlı prototipleme:** Semantic Kernel'ın yapılandırması ve öğrenme eğrisi yüksektir.
+- **Azure dışı bulut:** AWS veya GCP odaklı projelerde avantajı azalır.
+- **Topluluk boyutu:** LangChain/LangGraph kadar geniş bir topluluk ve ekosisteme sahip değil.
+
+## Kurulum
+
+```bash
+# Python
+pip install semantic-kernel
+
+# .NET (NuGet)
+# dotnet add package Microsoft.SemanticKernel
+
+# Ortam değişkenleri
+export AZURE_OPENAI_ENDPOINT="https://your-resource.openai.azure.com/"
+export AZURE_OPENAI_API_KEY="..."
+export AZURE_OPENAI_DEPLOYMENT_NAME="gpt-4o"
+```
+
+<Callout type="ipucu">
+Azure aboneliğiniz yoksa OpenAI API anahtarıyla da Semantic Kernel kullanabilirsiniz. Azure entegrasyonu zorunlu değildir ancak kurumsal özelliklerin tamamından yararlanmak için Azure önerilir.
+</Callout>
+
+## İlk çalıştırma
+
+```python
+import asyncio
+import semantic_kernel as sk
+from semantic_kernel.connectors.ai.open_ai import AzureChatCompletion
+
+async def main():
+    # Kernel oluştur
+    kernel = sk.Kernel()
+
+    # AI servisini ekle
+    kernel.add_service(
+        AzureChatCompletion(
+            service_id="azure_openai",
+            deployment_name="gpt-4o",
+            endpoint=os.environ["AZURE_OPENAI_ENDPOINT"],
+            api_key=os.environ["AZURE_OPENAI_API_KEY"]
+        )
+    )
+
+    # Basit bir prompt fonksiyonu tanımla
+    summarize = kernel.add_function(
+        plugin_name="TextPlugin",
+        function_name="Summarize",
+        prompt="Aşağıdaki metni 3 cümleyle özetle:\n\n{{$input}}",
+        template_format="semantic-kernel"
+    )
+
+    result = await kernel.invoke(
+        summarize,
+        input="Agentic AI sistemleri 2026 yılında üretimde yaygınlaştı..."
+    )
+    print(result)
+
+asyncio.run(main())
+```
+
+## Senaryolar
+
+### 1) Plugin ile Mevcut Servisi AI'ya Açma
+
+```python
+from semantic_kernel.functions import kernel_function
+
+class MusteriServisiPlugin:
+    """Mevcut CRM sistemini AI'ya açan plugin."""
+
+    @kernel_function(
+        name="musteri_bul",
+        description="Müşteriyi ID veya email ile bul"
+    )
+    async def musteri_bul(self, musteri_id: str) -> str:
+        # Mevcut veritabanı sorgusunu çağır
+        musteri = await crm_db.get_customer(musteri_id)
+        return str(musteri)
+
+    @kernel_function(
+        name="siparis_gecmisi",
+        description="Müşterinin son 6 aydaki sipariş geçmişini getir"
+    )
+    async def siparis_gecmisi(self, musteri_id: str) -> str:
+        siparisler = await order_db.get_orders(musteri_id, months=6)
+        return str(siparisler)
+
+# Plugin'i kernel'a kaydet
+kernel.add_plugin(MusteriServisiPlugin(), plugin_name="MusteriServisi")
+```
+
+### 2) Planner ile Otomatik Görev Planlama
+
+```python
+from semantic_kernel.planners import FunctionCallingStepwisePlanner
+
+planner = FunctionCallingStepwisePlanner(service_id="azure_openai")
+
+# Kullanıcı niyetini ver, Planner hangi fonksiyonları çağıracağına karar verir
+plan = await planner.invoke(
+    kernel,
+    "Müşteri C-2341'in son siparişini bul ve bir indirim kuponu oluştur."
+)
+print(plan.final_answer)
+# Planner otomatik olarak: musteri_bul → siparis_gecmisi → kupon_olustur adımlarını çalıştırır
+```
+
+### 3) .NET'te Ajan (C# Örneği)
+
+```csharp
+// Microsoft.SemanticKernel NuGet paketi ile
+using Microsoft.SemanticKernel;
+using Microsoft.SemanticKernel.Agents;
+
+var kernel = Kernel.CreateBuilder()
+    .AddAzureOpenAIChatCompletion(
+        deploymentName: "gpt-4o",
+        endpoint: Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT"),
+        apiKey: Environment.GetEnvironmentVariable("AZURE_OPENAI_API_KEY"))
+    .Build();
+
+// Ajan tanımı
+var agent = new ChatCompletionAgent
+{
+    Kernel = kernel,
+    Name = "DestekAjani",
+    Instructions = "Müşteri destek uzmanısın. Kibarca ve çözüm odaklı yanıt ver."
+};
+
+// Konuşma başlat
+var thread = new AgentGroupChat(agent);
+await thread.AddChatMessageAsync(new ChatMessageContent(
+    AuthorRole.User, "Siparişim nerede?"));
+
+await foreach (var response in thread.InvokeAsync())
+{
+    Console.WriteLine(response.Content);
+}
+```
+
+## Diğer araçlarla
+
+**Azure AI Foundry ile:** Semantic Kernel, Azure AI Foundry (eski Azure Machine Learning + AI Studio birleşimi) ile tam entegre çalışır — model deployment, monitoring ve fine-tuning tek platformda.
+
+**AutoGen'den geçiş:** AutoGen'in grup sohbet mimarisini Semantic Kernel Agent Framework'e taşımak için Microsoft'un resmi migration rehberini takip edin.
+
+**Microsoft 365 Copilot ile:** Semantic Kernel, Microsoft 365 Copilot eklentileri (plugin) geliştirmek için resmi çerçevedir.
+
+**LangGraph ile:** Farklı ekosistemler olsa da Python'da LangGraph ve Semantic Kernel'ı aynı projede birlikte kullanmak teknik olarak mümkündür — LangGraph orkestrasyon, Semantic Kernel Azure AI entegrasyon katmanı olarak.
+
+## Yaygın hatalar ve çözümleri
+
+<details>
+<summary>async/await uyumsuzluğu — RuntimeError: no running event loop</summary>
+
+```python
+# Yanlış — senkron bağlamda await kullanılıyor
+result = kernel.invoke(func, input="test")  # Hata
+
+# Doğru — asyncio.run() ile çalıştır
+import asyncio
+result = asyncio.run(kernel.invoke(func, input="test"))
+```
+
+</details>
+
+<details>
+<summary>Plugin fonksiyonu bulunamıyor (FunctionNotFound)</summary>
+
+Plugin adı ve fonksiyon adının tam eşleştiğinden emin olun:
+
+```python
+# Plugin kaydı
+kernel.add_plugin(MyPlugin(), plugin_name="BenimPlugin")
+
+# Çağırım — plugin_name.function_name formatı
+result = await kernel.invoke("BenimPlugin", "fonksiyon_adi", input="...")
+```
+
+</details>
+
+<details>
+<summary>Azure token limit hatası (429)</summary>
+
+```python
+# Retry politikası ekle
+from semantic_kernel.connectors.ai.open_ai import AzureChatCompletion
+service = AzureChatCompletion(
+    ...,
+    max_retries=3  # Otomatik yeniden deneme
+)
+```
+
+</details>
+
+## Maliyet / limit
+
+- **Açık kaynak:** Semantic Kernel kendisi ücretsiz; maliyet Azure OpenAI veya OpenAI API kullanımından kaynaklanır.
+- **Azure OpenAI fiyatlandırması:** Token başı Azure fiyatları, OpenAI doğrudan API'sine benzer; rezervasyon planlarıyla düşürülebilir.
+- **Planner maliyeti:** Planner, hedef analiz ve adım planlama için ek model çağrısı yapar — basit görevler için maliyet dengesini değerlendirin.
+
+<Callout type="info">
+Kurumsal kullanımda Azure Committed Use ile önemli indirim sağlanabilir. Microsoft satış ekibiyle görüşerek özel fiyatlandırma alabilirsiniz.
+</Callout>
+
+## Karşılaştırma
+
+[LangGraph vs CrewAI vs AutoGen](/karsilastirmalar/langgraph-vs-crewai-vs-autogen)
+
+[Framework seçim rehberi](/karsilastirmalar/framework-secim-rehberi)
+
+## Daha fazla
+
+- [Semantic Kernel resmi dokümantasyonu](https://learn.microsoft.com/semantic-kernel) — Microsoft Learn
+- [Semantic Kernel GitHub](https://github.com/microsoft/semantic-kernel) — Açık kaynak
+- [Azure AI Foundry](https://ai.azure.com) — Kurumsal AI platformu
+- [AutoGen'den SK'ya geçiş](https://learn.microsoft.com/semantic-kernel/agents/migration) — Microsoft
+- [Semantic Kernel Discord](https://discord.gg/semantic-kernel) — Topluluk

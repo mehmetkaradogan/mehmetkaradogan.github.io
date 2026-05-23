@@ -1,0 +1,182 @@
+---
+title: "LangGraph vs CrewAI vs AutoGen: Hangisini Seçmelisiniz?"
+slug: langgraph-vs-crewai-vs-autogen
+category: karsilastirmalar
+level: orta
+summary: "LangGraph, CrewAI ve AutoGen'i 12 boyutta karşılaştıran karar rehberi. Üretim, prototipleme ve bakım perspektifinden hangisini ne zaman kullanmalısınız?"
+updated: 2026-05-23
+tags: [langgraph, crewai, autogen, multi-agent, framework, karsilastirma, orkestrasyon]
+related: [framework-secim-rehberi, multi-model-stratejileri, desenler]
+tools: ["langgraph", "crewai", "autogen"]
+---
+
+## Kime Hangisi?
+
+Multi-agent (çok ajanlı) sistem kurmak istediğinizde karşınıza üç büyük isim çıkıyor: **LangGraph**, **CrewAI** ve **AutoGen**. Ancak bu üçü birbirinin alternatifi değil; farklı olgunluk seviyelerinde, farklı önceliklere sahip takımlar için tasarlanmış araçlar.
+
+Kısa cevap:
+
+- **LangGraph** → Üretim (production) sistemi kuruyorsanız, denetlenebilirlik ve durumlu (stateful) iş akışları önceliklendiriyorsanız.
+- **CrewAI** → Prototip hızı önemliyse, takım tabanlı rol atamalarını seviyorsanız ve 1 günde çalışan bir demo istiyorsanız.
+- **AutoGen** → **Yeni projeler için önerilmez.** Microsoft, AutoGen'i bakım moduna (maintenance mode) almış; aktif geliştirme Microsoft Agent Framework'e taşınmıştır. Mevcut AutoGen kodlarını okumanız veya anlamanız gerektiğinde kullanabilirsiniz.
+
+---
+
+## Büyük Karşılaştırma Tablosu
+
+| Boyut | LangGraph | CrewAI | AutoGen |
+|---|---|---|---|
+| **Otonomi seviyesi** | Yüksek; grafikte her düğüm bağımsız karar alabilir | Orta; rol tabanlı görev dağılımı | Yüksek; konuşma tabanlı otonom döngü |
+| **Durum yönetimi (state)** | Birinci sınıf; `StateGraph` + checkpoint | Sınırlı; görev durumu bellekte tutar | Sınırlı; mesaj geçmişi üzerinden |
+| **Gözlemlenebilirlik (observability)** | LangSmith ile native entegrasyon; trace, span, eval | Temel loglama; LangSmith eklentisi mümkün | Zayıf; özel loglama gerekir |
+| **Ekosistem** | LangChain / LangSmith; 200+ entegrasyon | Bağımsız; OpenAI/Anthropic/Ollama desteği | Microsoft; Semantic Kernel ile entegre |
+| **Fiyat (çerçeve)** | Açık kaynak (MIT); LangSmith bulut ücretli | Açık kaynak (MIT) | Açık kaynak (MIT); Microsoft Agent Framework ücretli |
+| **Öğrenme eğrisi** | Dik; graf kavramı, node/edge/reducer anlaşılmalı | Düz; `Agent`, `Task`, `Crew` sezgisel | Orta; konuşma primitifleri basit ama debugging zor |
+| **MCP desteği** | Topluluk eklentileri mevcut; resmi yol yok | Topluluk araçlarıyla mümkün | Yok |
+| **A2A desteği** | Deneysel | Yok | Yok |
+| **Üretim olgunluğu** | Yüksek; BlackRock, JPMorgan kullanımda | Orta; pilot ve küçük ölçek | Düşük; **bakım modunda** |
+| **Topluluk** | Büyük ve aktif (LangChain çatısı altında) | Orta büyüklükte, büyüyor | Azalan; Microsoft Fork'a geçiş |
+| **Hata ayıklama (debugging)** | LangSmith ile görsel trace; güçlü | Console log + manuel | Zor; konuşma akışını izlemek güç |
+| **Dağıtım (deployment)** | LangGraph Cloud, Kubernetes, self-host | FastAPI wrapper; standart Python deployment | Standart Python; üretim patikası belirsiz |
+
+---
+
+## 3 Mini Vaka Çalışması
+
+### Vaka 1: Fintech Şirketi — Kredi Risk Analizi
+
+Bir fintech girişimi, kredi başvurularını otomatik değerlendiren bir sistem kurmak istiyor. Gereksinimler: denetlenebilir adımlar, her kararın kayıt altına alınması, insan onay noktaları (human-in-the-loop checkpoint).
+
+**Seçim: LangGraph**
+
+LangGraph'ın `StateGraph` yapısı her adımı bir düğüm olarak modeller. `MemorySaver` ile checkpoint'ler otomatik kaydedilir; LangSmith'te her kararın izi sürülebilir. Regülatörler "model neden bu kararı verdi?" diye sorduğunda yanıt verebilirsiniz.
+
+```python
+from langgraph.graph import StateGraph, END
+from langgraph.checkpoint.memory import MemorySaver
+
+def veri_toplama_node(state):
+    # başvuru verisini çek
+    return {"veri": fetch_application(state["basvuru_id"])}
+
+def risk_degerlendirme_node(state):
+    skor = model.invoke(state["veri"])
+    return {"risk_skoru": skor}
+
+def insan_onay_node(state):
+    # risk yüksekse bekle
+    if state["risk_skoru"] > 0.7:
+        return {"onay_bekliyor": True}
+    return {"onay_bekliyor": False}
+
+graph = StateGraph(dict)
+graph.add_node("veri_toplama", veri_toplama_node)
+graph.add_node("risk_degerlendirme", risk_degerlendirme_node)
+graph.add_node("insan_onay", insan_onay_node)
+graph.set_entry_point("veri_toplama")
+graph.add_edge("veri_toplama", "risk_degerlendirme")
+graph.add_edge("risk_degerlendirme", "insan_onay")
+graph.add_edge("insan_onay", END)
+
+checkpointer = MemorySaver()
+app = graph.compile(checkpointer=checkpointer)
+```
+
+---
+
+### Vaka 2: İçerik Ajansı — Haber Üretim Hattı
+
+Küçük bir içerik ajansı, araştırmacı + yazar + editör rollerini otomatize etmek istiyor. Bir haftada çalışan demo gerekiyor; mükemmel mimari değil, hız öncelikli.
+
+**Seçim: CrewAI**
+
+CrewAI'nın rol tabanlı sözdizimi bu senaryoya biçilmiş kaftan. Üç ajan tanımlayıp görevi devretmek birkaç saat iş.
+
+```python
+from crewai import Agent, Task, Crew
+
+arastirmaci = Agent(
+    role="Araştırmacı",
+    goal="Verilen konuda 5 güvenilir kaynak bul ve özetle",
+    backstory="Deneyimli araştırma gazetecisi",
+    llm="claude-sonnet-4-5"
+)
+
+yazar = Agent(
+    role="İçerik Yazarı",
+    goal="Araştırma özetinden 800 kelimelik makale yaz",
+    backstory="SEO odaklı içerik uzmanı",
+    llm="claude-sonnet-4-5"
+)
+
+editor = Agent(
+    role="Editör",
+    goal="Makaleyi gözden geçir, hataları düzelt",
+    backstory="15 yıllık gazetecilik deneyimi",
+    llm="claude-haiku-4"
+)
+
+arastirma_gorevi = Task(
+    description="Agentic AI trendleri hakkında araştır",
+    agent=arastirmaci
+)
+
+yazi_gorevi = Task(
+    description="Araştırma sonuçlarından makale yaz",
+    agent=yazar
+)
+
+duzeltme_gorevi = Task(
+    description="Makaleyi düzelt ve yayına hazırla",
+    agent=editor
+)
+
+crew = Crew(
+    agents=[arastirmaci, yazar, editor],
+    tasks=[arastirma_gorevi, yazi_gorevi, duzeltme_gorevi]
+)
+
+sonuc = crew.kickoff()
+```
+
+---
+
+### Vaka 3: Mevcut AutoGen Kodu Bakımı
+
+Bir şirketin 2024'te AutoGen ile yazdığı müşteri destek botu var. Yeni özellik eklemesi gerekiyor.
+
+**Yaklaşım: Okuma-anlama, yeni kod yazmama**
+
+AutoGen bakım modunda olduğu için yeni özellik eklemek yerine mevcut kodu LangGraph veya CrewAI'ya adım adım taşımak daha sağlıklı. Kısa vadede `pyautogen` paketini kullanmaya devam edebilirsiniz; ancak uzun vadeli yatırım yapmayın.
+
+<Callout type="uyari">
+AutoGen (pyautogen) Microsoft tarafından bakım moduna alınmıştır. Yeni proje başlatmak için **LangGraph** (üretim) veya **CrewAI** (prototip) tercih edin. Mevcut AutoGen projelerini aşamalı olarak taşımayı planlayın.
+</Callout>
+
+---
+
+## Yanlış Seçimin Maliyeti
+
+Framework seçimi, başlangıçta önemsiz görünse de uzun vadede ciddi maliyet yaratır.
+
+**Mimari maliyet:** CrewAI ile başlayıp üretimde LangGraph'a geçmek, genellikle kodun %60-80'ini yeniden yazmak anlamına gelir. İki çerçevenin state yönetimi, hata işleme ve checkpoint yaklaşımları temelden farklıdır.
+
+**Operasyonel maliyet:** LangSmith olmadan üretimdeki bir LangGraph uygulamasını debug etmek neredeyse imkansız. Gözlemlenebilirlik altyapısını sonradan eklemek, baştan kurmaktan 3-4 kat daha pahalıdır.
+
+**Model maliyet tuzağı:** Her framework varsayılan olarak en güçlü modeli kullanır. Bir CrewAI kurulumunda 3 ajan × Opus düzeyinde model = her görev çalışmasında 3 pahalı çağrı. Subagent başına model ataması yapmazsanız haftalık faturanız beklenmedik rakamlara ulaşır. Detaylar için bkz. [Model Context Management](/kavramlar/model-context-management) ve [Multi-Model Stratejileri](/workflow/multi-model-stratejileri).
+
+**Ekosistem riski:** AutoGen örneğinde görüldüğü gibi, bakım moduna giren bir framework seçmek — topluluk küçülmesi, güvenlik yamaları azalması, yeni model entegrasyonu eksikliği demektir.
+
+<Callout type="ipucu">
+Karar kuralı: Proof of concept için CrewAI, üretim için LangGraph. AutoGen kodu varsa taşıma planı yapın. Maliyeti kontrol altında tutmak için her ajan rolüne en ucuz yeterli modeli atayın.
+</Callout>
+
+---
+
+## İlgili Araçlar
+
+- [LangGraph](/araclar/langgraph) — Durum makinesi tabanlı agentic framework
+- [CrewAI](/araclar/crewai) — Rol tabanlı multi-agent framework
+- [AutoGen](/araclar/autogen) — Microsoft'un bakım modundaki konuşma framework'ü
+- [Framework Seçim Rehberi](/karsilastirmalar/framework-secim-rehberi) — Daha geniş perspektif
+- [Workflow Desenleri](/workflow/desenler) — Manager-Worker, Group Chat ve diğer desenler

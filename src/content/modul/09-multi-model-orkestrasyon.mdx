@@ -1,0 +1,477 @@
+---
+title: "Multi-Model Orkestrasyon ve Maliyet Optimizasyonu"
+slug: 09-multi-model-orkestrasyon
+category: modul
+level: ileri
+summary: "Birden fazla LLM'i maliyet ve kalite dengesini gözeterek yönlendiren router, cascading ve ensemble pattern'lerini üretim kalitesinde uygulama; gerçek maliyet hesabı ve izleme (observability) kurulumu."
+updated: 2026-05-23
+tags: [multi-model, orkestrasyon, router, maliyet, observability, ileri]
+related: [08-antigravity-ile-build, 07-claude-code-uretim, 05-crewai-multi-agent]
+modul: "09"
+sure: "150 dakika"
+onkosul: ["01-temeller", "04-langgraph-baslangic", "05-crewai-multi-agent"]
+ciktilar:
+  - "Router pattern ile göreve göre model seçebilme"
+  - "Cascading fallback zinciri kurabilme"
+  - "Gerçek maliyet hesabı yapabilme"
+  - "LangSmith veya Prometheus ile izleme kurabilme"
+---
+
+## Hedef
+
+Bu kursun son modülünde birden fazla LLM'i bir araya getiren üretim kalitesinde orkestrasyon sistemi kurabileceksin. Maliyet disiplinini (§1.7) somut kod ve gerçek hesaplamalarla uygulayacak, sistemini izleyebilir (observable) hale getireceksin.
+
+## Önkoşullar
+
+- [Modül 04](/modul/04-langgraph-baslangic) ve [Modül 05](/modul/05-crewai-multi-agent) tamamlandı
+- Anthropic API anahtarı; tercihen OpenAI API anahtarı da
+
+## Öğrenme çıktıları
+
+1. Router pattern ile görev sınıflandırma ve model yönlendirme yapabilirsin.
+2. Cascading fallback zinciri kurarak güvenilirliği artırabilirsin.
+3. Ensemble/debate pattern ile doğruluğu yükseltebilirsin.
+4. Token maliyet tablosu ile her modelin maliyetini hesaplayabilirsin.
+5. Sistemi LangSmith veya Prometheus ile izleyebilirsin.
+
+---
+
+## Adım 1 — Neden multi-model orkestrasyon?
+
+Tek model her şeyi yapabilir — ama bu hem pahalıdır hem de optimal değildir.
+
+Maliyet uyarısı (§1.7): Multi-agent sistemler her agent-arası mesajda model çağrısı yapar. Her şeyi Opus veya Gemini 3 Pro ile çalıştırmak haftalık 3 haneli Euro faturalar yaratabilir.
+
+Çözüm: Göreve göre doğru modeli seç.
+
+```
+Görev türleri            Önerilen model         Maliyet seviyesi
+─────────────────────────────────────────────────────────────
+Lint, format, basit sınıf  Haiku / Gemini Flash  Çok düşük
+Özetleme, kategori         Sonnet 4.5            Düşük
+Karmaşık analiz, kod       Sonnet 4.5 / Gemini Pro  Orta
+Mimari, araştırma          Opus 4 / Gemini 3 Pro  Yüksek
+```
+
+---
+
+## Adım 2 — Maliyet tablosu (Mayıs 2026)
+
+```python
+# maliyetler.py
+# Fiyatlar yaklaşık; resmi sayfa için docs.anthropic.com/pricing kontrol et.
+
+MALIYET_TABLOSU = {
+    "claude-haiku-4-5": {
+        "giris_1m": 0.25,   # USD / 1M token
+        "cikis_1m": 1.25,
+    },
+    "claude-sonnet-4-5": {
+        "giris_1m": 3.00,
+        "cikis_1m": 15.00,
+    },
+    "claude-opus-4-5": {
+        "giris_1m": 15.00,
+        "cikis_1m": 75.00,
+    },
+    "gemini-3-flash": {
+        "giris_1m": 0.075,
+        "cikis_1m": 0.30,
+    },
+    "gemini-3-pro": {
+        "giris_1m": 1.25,
+        "cikis_1m": 5.00,
+    },
+}
+
+def maliyet_hesapla(model: str, giris_token: int, cikis_token: int) -> float:
+    """USD cinsinden tahmini maliyet hesaplar."""
+    if model not in MALIYET_TABLOSU:
+        return 0.0
+    tablo = MALIYET_TABLOSU[model]
+    return (
+        giris_token / 1_000_000 * tablo["giris_1m"] +
+        cikis_token / 1_000_000 * tablo["cikis_1m"]
+    )
+
+# Örnek: 1000 görev, her biri 2000 giriş + 500 çıkış token
+for model in MALIYET_TABLOSU:
+    maliyet = maliyet_hesapla(model, 2000, 500) * 1000
+    print(f"{model}: ${maliyet:.4f} / 1000 görev")
+```
+
+---
+
+## Adım 3 — Router Pattern
+
+Ucuz bir model önce görevi sınıflandırır, ardından uygun modele yönlendirir:
+
+```python
+# router.py
+import os
+from dotenv import load_dotenv
+import anthropic
+
+load_dotenv()
+client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+
+# Sınıflandırma için ucuz model
+ROUTER_MODEL = "claude-haiku-4-5"
+
+GOREV_MODELLERI = {
+    "basit": "claude-haiku-4-5",
+    "orta": "claude-sonnet-4-5",
+    "karmasik": "claude-opus-4-5",
+}
+
+def gorev_siniflandir(gorev: str) -> str:
+    """Görevi haiku ile sınıflandır — çok ucuz."""
+    yanit = client.messages.create(
+        model=ROUTER_MODEL,
+        max_tokens=16,
+        system=(
+            "Görevi yalnızca şu kelimelerden biriyle sınıflandır: "
+            "basit | orta | karmasik\n"
+            "basit: format, lint, kısa metin\n"
+            "orta: özetleme, çeviri, analiz\n"
+            "karmasik: mimari, araştırma, çok adımlı çıkarım"
+        ),
+        messages=[{"role": "user", "content": gorev}]
+    )
+    kategori = yanit.content[0].text.strip().lower()
+    return kategori if kategori in GOREV_MODELLERI else "orta"
+
+def router_ile_calistir(gorev: str) -> dict:
+    """Görevi sınıflandır ve uygun modele yönlendir."""
+    kategori = gorev_siniflandir(gorev)
+    model = GOREV_MODELLERI[kategori]
+
+    yanit = client.messages.create(
+        model=model,
+        max_tokens=1024,
+        messages=[{"role": "user", "content": gorev}]
+    )
+
+    return {
+        "model": model,
+        "kategori": kategori,
+        "yanit": yanit.content[0].text,
+        "giris_token": yanit.usage.input_tokens,
+        "cikis_token": yanit.usage.output_tokens,
+        "tahmini_maliyet_usd": maliyet_hesapla(
+            model, yanit.usage.input_tokens, yanit.usage.output_tokens
+        )
+    }
+
+# Test
+gorevler = [
+    "Bu metni büyük harfe çevir: merhaba",
+    "Bu Python kodunu özetle: [100 satırlık kod]",
+    "Dağıtık sistemlerde CAP teoremini derinlemesine açıkla"
+]
+
+for g in gorevler:
+    sonuc = router_ile_calistir(g)
+    print(f"Görev: {g[:40]}...")
+    print(f"  Kategori: {sonuc['kategori']} | Model: {sonuc['model']}")
+    print(f"  Maliyet: ${sonuc['tahmini_maliyet_usd']:.6f}\n")
+```
+
+---
+
+## Adım 4 — Cascading Fallback
+
+Önce ucuz modeli dene, yetersiz kalite veya hata durumunda pahalıya geç:
+
+```python
+# cascading.py
+import time
+
+ZINCIR = [
+    {"model": "claude-haiku-4-5", "min_kalite": 0.6},
+    {"model": "claude-sonnet-4-5", "min_kalite": 0.8},
+    {"model": "claude-opus-4-5", "min_kalite": 1.0},
+]
+
+def kalite_degerlendir(yanit: str, beklenen_uzunluk: int = 100) -> float:
+    """
+    Basit bir kalite tahmini (gerçekte daha sofistike bir değerlendirici kullan).
+    0.0 - 1.0 arası puan döner.
+    """
+    if not yanit or len(yanit) < 10:
+        return 0.0
+    uzunluk_puani = min(len(yanit) / beklenen_uzunluk, 1.0)
+    return uzunluk_puani
+
+def cascading_calistir(gorev: str, beklenen_uzunluk: int = 200) -> dict:
+    toplam_maliyet = 0.0
+    for adim in ZINCIR:
+        model = adim["model"]
+        print(f"Deneniyor: {model}")
+
+        try:
+            yanit = client.messages.create(
+                model=model,
+                max_tokens=1024,
+                messages=[{"role": "user", "content": gorev}]
+            )
+            metin = yanit.content[0].text
+            maliyet = maliyet_hesapla(
+                model, yanit.usage.input_tokens, yanit.usage.output_tokens
+            )
+            toplam_maliyet += maliyet
+
+            kalite = kalite_degerlendir(metin, beklenen_uzunluk)
+            print(f"  Kalite puanı: {kalite:.2f} | Maliyet: ${maliyet:.6f}")
+
+            if kalite >= adim["min_kalite"]:
+                return {
+                    "model": model, "yanit": metin,
+                    "kalite": kalite, "toplam_maliyet": toplam_maliyet
+                }
+
+        except Exception as e:
+            print(f"  Hata ({model}): {e}")
+            time.sleep(1)
+
+    return {"model": "fallback", "yanit": "Tüm modeller başarısız oldu.", "toplam_maliyet": toplam_maliyet}
+```
+
+---
+
+## Adım 5 — Ensemble / Debate Pattern
+
+Birden fazla model yanıt üretir, bir jüri model en iyisini seçer:
+
+```python
+# ensemble.py
+import asyncio
+
+async def paralel_yanit_al(gorev: str, modeller: list[str]) -> list[dict]:
+    """Birden fazla modeli eş zamanlı çalıştır."""
+    import anthropic
+    client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+
+    async def tek_yanit(model: str) -> dict:
+        loop = asyncio.get_event_loop()
+        yanit = await loop.run_in_executor(
+            None,
+            lambda: client.messages.create(
+                model=model, max_tokens=512,
+                messages=[{"role": "user", "content": gorev}]
+            )
+        )
+        return {"model": model, "yanit": yanit.content[0].text}
+
+    return await asyncio.gather(*[tek_yanit(m) for m in modeller])
+
+def juri_sec(gorev: str, yanıtlar: list[dict]) -> dict:
+    """Haiku ile jüri değerlendirmesi — ucuz."""
+    yanit_metni = "\n\n".join(
+        f"[Model {i+1}: {y['model']}]\n{y['yanit']}"
+        for i, y in enumerate(yanıtlar)
+    )
+
+    karar = client.messages.create(
+        model="claude-haiku-4-5",
+        max_tokens=32,
+        system="Verilen yanıtlar arasında en doğru ve kapsamlı olanını seç. Sadece 'Model 1', 'Model 2' veya 'Model 3' yaz.",
+        messages=[{"role": "user", "content": f"Görev: {gorev}\n\nYanıtlar:\n{yanit_metni}"}]
+    )
+    secim_metni = karar.content[0].text.strip()
+    # Model numarasını çıkar
+    for i, y in enumerate(yanıtlar):
+        if str(i + 1) in secim_metni:
+            return y
+    return yanıtlar[0]
+
+async def ensemble_calistir(gorev: str) -> dict:
+    modeller = ["claude-haiku-4-5", "claude-sonnet-4-5", "claude-sonnet-4-5"]
+    yanıtlar = await paralel_yanit_al(gorev, modeller)
+    kazanan = juri_sec(gorev, yanıtlar)
+    return kazanan
+```
+
+<Callout type="not">
+Ensemble pattern, doğruluğu artırır ama maliyeti 2-3 katlar. Yalnızca kritik kararlar için kullan (tıp, hukuk, güvenlik gibi yüksek hata maliyetli alanlar).
+</Callout>
+
+---
+
+## Adım 6 — LangSmith ile izleme (Observability)
+
+```bash
+pip install langsmith
+```
+
+```python
+# izleme.py
+import os
+from langsmith import traceable, Client
+
+os.environ["LANGSMITH_TRACING"] = "true"
+os.environ["LANGSMITH_API_KEY"] = "ls__..."   # .env'e ekle
+os.environ["LANGSMITH_PROJECT"] = "multi-model-orkestrasyon"
+
+ls_client = Client()
+
+@traceable(name="gorev_siniflandir", run_type="llm")
+def gorev_siniflandir_izleme(gorev: str) -> str:
+    return gorev_siniflandir(gorev)
+
+@traceable(name="router_pipeline", run_type="chain")
+def izlenen_router(gorev: str) -> dict:
+    kategori = gorev_siniflandir_izleme(gorev)
+    model = GOREV_MODELLERI.get(kategori, "claude-sonnet-4-5")
+    yanit = client.messages.create(
+        model=model, max_tokens=512,
+        messages=[{"role": "user", "content": gorev}]
+    )
+    return {
+        "model": model, "kategori": kategori,
+        "yanit": yanit.content[0].text,
+        "token": yanit.usage.input_tokens + yanit.usage.output_tokens
+    }
+
+# Çalıştır — LangSmith'te izlenir
+print(izlenen_router("Python'da async/await nasıl çalışır?"))
+```
+
+---
+
+## Adım 7 — Üretim yapılandırması
+
+```python
+# uretim_sistemi.py
+import logging
+from dataclasses import dataclass, field
+from typing import Literal
+
+@dataclass
+class OrkestrastonKonfig:
+    mod: Literal["router", "cascading", "ensemble"] = "router"
+    butce_limit_usd: float = 0.10    # Tek görev için maksimum harcama
+    zaman_asimi_saniye: int = 30
+    yeniden_deneme_sayisi: int = 2
+    izleme_aktif: bool = True
+    varsayilan_model: str = "claude-sonnet-4-5"
+
+class UretermOrkestratoru:
+    def __init__(self, konfig: OrkestrastonKonfig):
+        self.konfig = konfig
+        self.toplam_maliyet = 0.0
+        self.logger = logging.getLogger(self.__class__.__name__)
+
+    def calistir(self, gorev: str) -> dict:
+        self.logger.info(f"Görev başladı: {gorev[:60]}...")
+
+        if self.konfig.mod == "router":
+            sonuc = router_ile_calistir(gorev)
+        elif self.konfig.mod == "cascading":
+            sonuc = cascading_calistir(gorev)
+        else:
+            import asyncio
+            sonuc = asyncio.run(ensemble_calistir(gorev))
+
+        maliyet = sonuc.get("tahmini_maliyet_usd", 0.0)
+        self.toplam_maliyet += maliyet
+
+        if maliyet > self.konfig.butce_limit_usd:
+            self.logger.warning(
+                f"Bütçe aşımı: ${maliyet:.4f} > ${self.konfig.butce_limit_usd}"
+            )
+
+        return sonuc
+
+    def maliyet_ozeti(self) -> str:
+        return f"Toplam harcama: ${self.toplam_maliyet:.4f} USD"
+```
+
+---
+
+## Egzersiz
+
+Aşağıdaki üretim sistemini kur:
+
+1. `gorevler.json` dosyasından 10 görevi oku.
+2. Router pattern ile her görevi uygun modele yönlendir.
+3. Her görevin maliyetini kaydet.
+4. Toplam maliyeti ve hangi modelin kaç kez kullanıldığını raporla.
+5. 0.01 USD'ı aşan görevleri `pahali_gorevler.txt`'ye yaz.
+
+<details>
+<summary>Çözüm (tıkla)</summary>
+
+```python
+# egzersiz_cozum.py
+import json
+import os
+from pathlib import Path
+from dotenv import load_dotenv
+from collections import defaultdict
+import anthropic
+
+load_dotenv()
+client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+
+# Örnek görevler dosyası
+GOREVLER = [
+    "Merhaba kelimesini büyük harfe çevir.",
+    "Python'da liste anlama ifadelerini (list comprehension) açıkla.",
+    "Kuantum hesaplama ile klasik hesaplama arasındaki temel farkları karşılaştır.",
+    "Bu sayıyı ikiyle çarp: 42",
+    "Makine öğrenmesinde aşırı uyum (overfitting) nedir?",
+    "CAP teoreminin üretim sistemlerine etkilerini analiz et.",
+    "Python'da print('test') yazmanın çıktısı nedir?",
+    "Transformer mimarisinin dikkat (attention) mekanizmasını açıkla.",
+    "LangGraph ile CrewAI'ı 10 boyutta karşılaştır.",
+    "1+1 kaçtır?"
+]
+
+Path("gorevler.json").write_text(json.dumps(GOREVLER, ensure_ascii=False, indent=2), encoding="utf-8")
+
+gorevler = json.loads(Path("gorevler.json").read_text(encoding="utf-8"))
+raporlar = []
+model_sayaci = defaultdict(int)
+pahali_gorevler = []
+
+for gorev in gorevler:
+    sonuc = router_ile_calistir(gorev)
+    raporlar.append(sonuc)
+    model_sayaci[sonuc["model"]] += 1
+    if sonuc["tahmini_maliyet_usd"] > 0.01:
+        pahali_gorevler.append(f"{gorev[:50]}... → {sonuc['model']} (${sonuc['tahmini_maliyet_usd']:.5f})")
+
+toplam = sum(r["tahmini_maliyet_usd"] for r in raporlar)
+print(f"\n=== RAPOR ===")
+print(f"Toplam maliyet: ${toplam:.5f} USD")
+print(f"Model kullanımı: {dict(model_sayaci)}")
+
+if pahali_gorevler:
+    Path("pahali_gorevler.txt").write_text("\n".join(pahali_gorevler), encoding="utf-8")
+    print(f"Pahalı görev sayısı: {len(pahali_gorevler)} (pahali_gorevler.txt'e yazıldı)")
+```
+
+</details>
+
+---
+
+## Tebrikler — Kursu Tamamladın!
+
+Bu modülle birlikte sıfırdan ileri seviyeye uzanan 9 modüllük yolculuğu tamamladın:
+
+| Modül | Konu | Seviye |
+|---|---|---|
+| 01 | Agentic AI Temelleri | Giriş |
+| 02 | Tool Calling | Giriş |
+| 03 | RAG Kurulumu | Giriş |
+| 04 | LangGraph | Orta |
+| 05 | CrewAI Multi-Agent | Orta |
+| 06 | MCP Sunucu Yazma | Orta |
+| 07 | Claude Code Üretim | İleri |
+| 08 | Antigravity Build | İleri |
+| 09 | Multi-Model Orkestrasyon | İleri |
+
+Bir sonraki adım: [Projeler](/projeler/orta) sayfasından gerçek bir bitirme projesi seç ve öğrendiklerini uygula!
+
+[Öğrenme Yoluna Dön](/roadmap) | [İleri Projeler](/projeler/ileri)

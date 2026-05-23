@@ -1,0 +1,24 @@
+---
+title: "Claude Agent SDK ve OpenAI Agents SDK olgunlaştı: birinci taraf yaklaşım güçlendi"
+slug: agent-sdk-olgunlasma
+category: haberler
+level: orta
+summary: "Anthropic'in Claude Agent SDK'sı ve OpenAI'nin Agents SDK'sı, Mayıs 2026 güncellemeleriyle üretim kalitesine ulaştı. Her iki SDK da handoff, tracing ve guardrail özelliklerini yerleşik sunuyor."
+updated: 2026-05-23
+date: 2026-05-16
+source: "anthropic-blog"
+newsType: update
+tags: ["claude-agent-sdk", "openai-agents-sdk", "sdk", "uretim", "tracing", "guardrail"]
+related: ["claude-agent-sdk", "openai-agents-sdk"]
+tools: ["claude-agent-sdk", "openai-agents-sdk"]
+---
+
+**Ne değişti:** Hem Anthropic hem de OpenAI, Mayıs 2026 güncellemeleriyle birinci taraf (first-party) ajan SDK'larını üretim kalitesine taşıdı. **Claude Agent SDK** güncellemesi şunları getirdi: yerleşik token kullanım raporlama, `SubAgent` sınıfıyla hiyerarşik ajan tanımlama, MCP sunucu bağlantısı ve oturum bazlı hafıza yönetimi. **OpenAI Agents SDK** güncellemesi ise: `handoff()` ile sorunsuz ajan devirleri, yerleşik guardrail (güvenlik sınırları), tracing entegrasyonu ve Assistants v2 ile geriye dönük uyumluluk içeriyor. Her iki SDK da async/await desteği sunuyor.
+
+**Etkisi:** Yerleşik tracing ve guardrail özellikleri, üçüncü taraf gözlemlenebilirlik araçlarına bağımlılığı azaltıyor. Bu gelişme, özellikle LangChain/LangGraph ekosistemi dışında çalışmak isteyen ekipler için önemli. Birinci taraf SDK tercihinin avantajı: sağlayıcının güvenlik güncellemeleri ve model değişiklikleriyle uyum otomatik geliyor. Dezavantajı: framework bağımsızlığı azalıyor.
+
+**Detay:** Claude Agent SDK'ya genel bakış için [/araclar/claude-agent-sdk](/araclar/claude-agent-sdk) sayfasına, OpenAI Agents SDK için [/araclar/openai-agents-sdk](/araclar/openai-agents-sdk) sayfasına bakın. Her iki SDK'yı LangGraph ile karşılaştıran rehber için [/karsilastirmalar/framework-secim-rehberi](/karsilastirmalar/framework-secim-rehberi) sayfasını ziyaret edin.
+
+<Callout type="info">
+Claude Agent SDK, Claude Code'un altyapısını paylaşıyor; dolayısıyla MCP yerleşik desteği oldukça güçlü. OpenAI Agents SDK ise computer-use özelliğiyle (OpenAI Codex entegrasyonu) GUI otomasyonunda öne çıkıyor. Kullanım senaryonuza göre seçin.
+</Callout>

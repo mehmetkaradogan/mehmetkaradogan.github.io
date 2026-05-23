@@ -1,0 +1,79 @@
+---
+// src/components/Hero.astro
+// Homepage hero section.
+
+export interface Props {
+  title?: string;
+  subtitle?: string;
+  primaryCta?: { label: string; href: string };
+  secondaryCta?: { label: string; href: string };
+  badge?: string;
+}
+
+const {
+  title = 'Türkçe Agentic AI Öğrenme Merkezi',
+  subtitle = 'Kavramlar, araçlar, modüller ve gerçek projelerle — sıfırdan ileri seviyeye kadar Türkçe tek kaynak.',
+  primaryCta = { label: 'Öğrenmeye başla', href: '/baslangic' },
+  secondaryCta = { label: "Roadmap'i gör", href: '/roadmap' },
+  badge = 'Türkçe · Agentic AI · 2026',
+} = Astro.props;
+---
+
+<section
+  class="relative overflow-hidden py-20 sm:py-28"
+  style="background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #0f172a 100%);"
+  aria-labelledby="hero-heading"
+>
+  <!-- Decorative radial gradients -->
+  <div
+    class="absolute inset-0 opacity-30 pointer-events-none"
+    style="background-image: radial-gradient(circle at 25% 50%, #6366f1 0%, transparent 60%), radial-gradient(circle at 75% 20%, #8b5cf6 0%, transparent 50%);"
+    aria-hidden="true"
+  ></div>
+
+  <div class="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+    <!-- Badge -->
+    <div
+      class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium mb-6"
+      style="background-color: rgba(99, 102, 241, 0.2); color: #a5b4fc; border: 1px solid rgba(99,102,241,0.3);"
+    >
+      {badge}
+    </div>
+
+    <h1 id="hero-heading" class="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-white mb-6">
+      {title.split('Öğrenme Merkezi').length > 1 ? (
+        <>
+          {title.split('Öğrenme Merkezi')[0]}
+          <span style="color: #a5b4fc;">Öğrenme Merkezi</span>
+        </>
+      ) : (
+        title
+      )}
+    </h1>
+
+    <p class="text-lg sm:text-xl max-w-2xl mx-auto mb-10" style="color: #cbd5e1;">
+      {subtitle}
+    </p>
+
+    <!-- CTAs -->
+    <div class="flex flex-col sm:flex-row gap-4 justify-center">
+      <a
+        href={primaryCta.href}
+        class="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-semibold text-white transition-all hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2"
+        style="background-color: #6366f1; box-shadow: 0 0 0 0 rgba(99,102,241,0);"
+      >
+        {primaryCta.label}
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M5 12h14M12 5l7 7-7 7"/>
+        </svg>
+      </a>
+      <a
+        href={secondaryCta.href}
+        class="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-semibold transition-all hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2"
+        style="background-color: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.2);"
+      >
+        {secondaryCta.label}
+      </a>
+    </div>
+  </div>
+</section>

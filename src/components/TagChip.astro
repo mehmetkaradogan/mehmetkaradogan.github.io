@@ -1,0 +1,28 @@
+---
+// src/components/TagChip.astro
+// Small inline tag chip for content tags.
+
+export interface Props {
+  tag: string;
+  href?: string;
+}
+
+const { tag, href } = Astro.props;
+---
+
+{href ? (
+  <a
+    href={href}
+    class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium transition-colors"
+    style="background-color: var(--bg-subtle); color: var(--text-secondary); border: 1px solid var(--border-color);"
+  >
+    #{tag}
+  </a>
+) : (
+  <span
+    class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium"
+    style="background-color: var(--bg-subtle); color: var(--text-secondary); border: 1px solid var(--border-color);"
+  >
+    #{tag}
+  </span>
+)}

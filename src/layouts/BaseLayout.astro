@@ -1,0 +1,80 @@
+---
+// src/layouts/BaseLayout.astro
+// Root layout shell: html lang=tr, BaseHead, no-FOUC dark init, Sidebar + TopBar + MobileNav + Footer.
+
+import BaseHead from '@components/BaseHead.astro';
+import TopBar from '@components/TopBar.astro';
+import Sidebar from '@components/Sidebar.astro';
+import MobileNav from '@components/MobileNav.astro';
+import Footer from '@components/Footer.astro';
+import '@styles/global.css';
+
+export interface Props {
+  title: string;
+  description: string;
+  ogImage?: string;
+}
+
+const { title, description, ogImage } = Astro.props;
+---
+
+<!doctype html>
+<html lang="tr">
+  <head>
+    <BaseHead
+      title={title}
+      description={description}
+      {...(ogImage !== undefined ? { ogImage } : {})}
+    />
+
+    <!-- No-FOUC dark init — must run synchronously before first paint -->
+    <script is:inline>
+      (function () {
+        try {
+          var stored = localStorage.getItem('theme');
+          var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          if (stored === 'dark' || (!stored && prefersDark)) {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+        } catch (_) {}
+      })();
+    </script>
+  </head>
+
+  <body class="flex flex-col min-h-screen">
+    <!-- Top bar (sticky) -->
+    <TopBar />
+
+    <!-- Page body: sidebar + main content -->
+    <div class="flex flex-1 min-h-0">
+      <!-- Desktop sidebar -->
+      <Sidebar />
+
+      <!-- Main content area -->
+      <main
+        id="main-content"
+        class="flex-1 min-w-0 pb-20 lg:pb-0"
+        tabindex="-1"
+      >
+        <slot />
+      </main>
+    </div>
+
+    <!-- Footer -->
+    <Footer />
+
+    <!-- Mobile bottom nav bar -->
+    <MobileNav />
+
+    <!-- Skip-to-content link for accessibility -->
+    <a
+      href="#main-content"
+      class="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[200] focus:px-4 focus:py-2 focus:rounded-lg focus:font-semibold focus:text-white"
+      style="background-color: var(--brand);"
+    >
+      İçeriğe geç
+    </a>
+  </body>
+</html>

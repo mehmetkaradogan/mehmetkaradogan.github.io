@@ -1,0 +1,24 @@
+---
+title: "AutoGen bakım moduna alındı: Microsoft yeni çerçeveye yöneldi"
+slug: autogen-bakim-moduna-alindi
+category: haberler
+level: giris
+summary: "Microsoft, AutoGen framework'ünü aktif geliştirme listesinden çıkardı ve kaynakları 'Microsoft Agent Framework' üzerine yoğunlaştırdı. Mevcut AutoGen projeleri için geçiş rehberi yayınlandı."
+updated: 2026-05-23
+date: 2026-05-07
+source: "microsoft-blog"
+newsType: deprecation
+tags: ["autogen", "microsoft", "deprecation", "multi-agent", "framework"]
+related: ["autogen"]
+tools: ["autogen", "langgraph", "crewai"]
+---
+
+**Ne değişti:** Microsoft, multi-agent framework'ü **AutoGen**'i resmi olarak bakım moduna (maintenance mode) aldı. Bu, yeni özellik geliştirmesinin durdurulduğu, yalnızca kritik güvenlik yamalarının sağlanacağı anlamına geliyor. Microsoft, ekibini ve kaynaklarını yeni nesil **Microsoft Agent Framework**'e yöneltti. GitHub reposunda bu karar açıkça belgelendi; yeni proje başlayanlar için AutoGen artık önerilmiyor.
+
+**Etkisi:** Mevcut AutoGen tabanlı projelerin kısa vadede çalışmaya devam edeceği, ancak uzun vadede destek belirsizliği nedeniyle geçiş planlaması yapılması gerektiği belirtiliyor. Microsoft, AutoGen 0.x'ten geçiş için bir kılavuz ve otomatik kod dönüştürücü yayınladı. **LangGraph** ve **CrewAI**, AutoGen'in boşluğunu doldurmak için en güçlü alternatifler olarak öne çıkıyor. CrewAI hızlı prototipleme için, LangGraph ise denetlenebilir üretim sistemleri için tercih ediliyor.
+
+**Detay:** AutoGen'in hangi özelliklerinin alternatif hangi araçta bulunduğuna dair karşılaştırma tablosu için [/araclar/autogen](/araclar/autogen) sayfasına bakın. Geçiş planlaması için [/karsilastirmalar/langgraph-vs-crewai-vs-autogen](/karsilastirmalar/langgraph-vs-crewai-vs-autogen) sayfasını inceleyin.
+
+<Callout type="uyari">
+Aktif AutoGen projeniz varsa, güvenlik açıkları için repoyu izlemeye devam edin ve 6-12 ay içinde geçiş planlaması başlatın. Yeni multi-agent projeler için LangGraph (üretim) veya CrewAI (prototip) tercih edin.
+</Callout>

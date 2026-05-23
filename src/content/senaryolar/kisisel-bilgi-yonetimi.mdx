@@ -1,0 +1,249 @@
+---
+title: "Kişisel Bilgi Yönetimi ile Akıllı Not ve Hafıza Sistemi"
+slug: kisisel-bilgi-yonetimi
+category: senaryolar
+level: giris
+summary: "Obsidian, Notion ve diğer araçlarla kişisel bilgi tabanını (PKM) ajanlı yapay zeka ile zenginleştirme: otomatik özetleme, çapraz bağlantı önerisi ve kişisel asistan kurulumu."
+updated: 2026-05-23
+tags: ["pkm", "obsidian", "rag", "memory", "kisisel-asistan"]
+related: ["arastirma", "otomasyon", "dokumantasyon"]
+---
+
+## Senaryo Tanımı
+
+Kişisel bilgi yönetimi (personal knowledge management — PKM) senaryosu, bir bireyin oluşturduğu notlar, belgeler, web klipleri ve okumaları yapay zeka ajanlarıyla anlamlı ve sorgulanabilir bir bilgi tabanına dönüştürmesini kapsar. Ajanın uzun vadeli hafıza (memory) yeteneği burada kritiktir: sadece tek bir soruyu yanıtlamaz, oturumlar arasında kullanıcının bilgisini biriktirir.
+
+Tipik kullanım durumları:
+- Obsidian vault'undaki notlara sohbet arayüzü
+- Okuduğun makalelerin otomatik özetlenmesi ve etiketlenmesi
+- Günlük notlardan haftalık özet çıkarma
+- Kavramlar arası otomatik bağlantı (backlink) önerisi
+- Kişisel asistan olarak toplantı notlarını işleme
+- Araştırma arşivini semantik arama ile sorgulama
+
+<Callout type="info">
+Bu senaryo giriş seviyesindedir. Obsidian veya Notion kullanan herkes başlayabilir. Kodlama bilgisi opsiyoneldir — no-code alternatifleri de verilmiştir.
+</Callout>
+
+---
+
+## Hangi Araçlar Uygundur?
+
+| Araç | Rol | Bağlantı |
+|---|---|---|
+| Obsidian AI | Vault üzerinde yerel AI entegrasyonu | [/araclar/obsidian-ai](/araclar/obsidian-ai) |
+| Claude Code | MCP ile Obsidian vault'una bağlı kişisel ajan | [/araclar/claude-code](/araclar/claude-code) |
+| n8n | Otomatik not alma ve etiketleme pipeline'ı | [/araclar/n8n](/araclar/n8n) |
+| LangGraph | Uzun vadeli hafızalı kişisel asistan | [/araclar/langgraph](/araclar/langgraph) |
+| Google Antigravity 2.0 | Yerleşik bilgi tabanı + agent memory | [/araclar/google-antigravity](/araclar/google-antigravity) |
+
+**Model önerisi:** Yerel gizlilik için Ollama + Llama 3; bulut için Claude Haiku (maliyet) veya Sonnet 4.5 (kalite).
+
+---
+
+## Önerilen Workflow Deseni
+
+PKM için **Agentic RAG** deseni en uygundur: ajan yalnızca statik bir veritabanından değil, dinamik olarak hangi kaynaklara bakacağına karar verir.
+
+Detaylı desen açıklaması: [/workflow/desenler](/workflow/desenler)
+
+```
+[Kullanıcı sorusu]
+       ↓
+[Ajan: ne tür bilgiye ihtiyacım var?]
+  → yeni not mu, geçmiş okuma mı, toplantı notu mu?
+       ↓
+[Dinamik retrieval (Agentic RAG)]
+  ├── vault_search("obsidian query")
+  ├── web_search (gerekirse)
+  └── memory_lookup (epizodik hafıza)
+       ↓
+[Sentez + yanıt]
+       ↓
+[Hafızayı güncelle: yeni bilgiyi kaydet]
+```
+
+---
+
+## Adım Adım Örnek
+
+### Hedef
+Obsidian vault'undaki tüm Markdown notlarını indeksle, sohbet arayüzüyle sorgula, yeni notları otomatik özetle.
+
+### Adım 1 — Kurulum
+
+```bash
+pip install langchain-anthropic langchain-community chromadb watchdog
+```
+
+### Adım 2 — Vault İndeksleme ve RAG Agent'ı
+
+```python
+import os
+from pathlib import Path
+from langchain_community.document_loaders import DirectoryLoader, UnstructuredMarkdownLoader
+from langchain.text_splitter import MarkdownHeaderTextSplitter
+from langchain_community.vectorstores import Chroma
+from langchain_anthropic import ChatAnthropic, AnthropicEmbeddings
+from langchain.chains import RetrievalQA
+
+VAULT_PATH = Path.home() / "Documents" / "ObsidianVault"  # Kendi yolunuzu girin
+
+# --- Notları yükle ve böl ---
+loader = DirectoryLoader(
+    str(VAULT_PATH),
+    glob="**/*.md",
+    loader_cls=UnstructuredMarkdownLoader,
+    show_progress=True
+)
+documents = loader.load()
+
+splitter = MarkdownHeaderTextSplitter(
+    headers_to_split_on=[("#", "Başlık"), ("##", "Alt Başlık")]
+)
+
+chunks = []
+for doc in documents:
+    splits = splitter.split_text(doc.page_content)
+    for split in splits:
+        split.metadata.update(doc.metadata)
+        chunks.append(split)
+
+print(f"{len(chunks)} parça yüklendi.")
+
+# --- Vektör deposu (vector store) oluştur ---
+# Not: AnthropicEmbeddings yerine OpenAI veya yerel model kullanabilirsiniz
+from langchain_community.embeddings import HuggingFaceEmbeddings
+
+embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/paraphrase-multilingual-mpnet-base-v2")
+
+vectorstore = Chroma.from_documents(
+    chunks,
+    embeddings,
+    persist_directory=".vault_index"
+)
+
+# --- Sorgulama ---
+llm = ChatAnthropic(model="claude-haiku-3-5")
+
+qa_chain = RetrievalQA.from_chain_type(
+    llm=llm,
+    chain_type="stuff",
+    retriever=vectorstore.as_retriever(search_kwargs={"k": 5}),
+    return_source_documents=True
+)
+
+# Sohbet döngüsü
+print("Vault'unuzla sohbet edin (çıkmak için 'q'):")
+while True:
+    soru = input("\nSoru: ").strip()
+    if soru.lower() == "q":
+        break
+    sonuc = qa_chain.invoke({"query": soru})
+    print(f"\nYanıt: {sonuc['result']}")
+    print("\nKaynak notlar:")
+    for doc in sonuc["source_documents"][:3]:
+        print(f"  - {doc.metadata.get('source', 'Bilinmeyen')}")
+```
+
+<Callout type="ipucu">
+Çok dilli notlar için `paraphrase-multilingual-mpnet-base-v2` embedding modeli hem Türkçe hem İngilizce metinleri iyi temsil eder. Tamamen yerel (offline) çalıştırmak istiyorsanız Ollama + nomic-embed-text kombinasyonunu tercih edin.
+</Callout>
+
+### Adım 3 — Otomatik Not Özetleme (Watchdog ile)
+
+```python
+import time
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
+
+class NoteHandler(FileSystemEventHandler):
+    def __init__(self, llm):
+        self.llm = llm
+
+    def on_created(self, event):
+        if event.src_path.endswith(".md"):
+            self._process_new_note(event.src_path)
+
+    def _process_new_note(self, path: str):
+        content = Path(path).read_text(encoding="utf-8")
+        if len(content) < 100:
+            return  # Çok kısa notları atla
+
+        response = self.llm.invoke(
+            f"Bu notu 3 madde halinde özetle ve 3-5 etiket öner:\n\n{content[:2000]}"
+        )
+        
+        # Özeti notun başına ekle
+        summary_block = f"""---
+ai_summary: |
+{chr(10).join('  ' + line for line in response.content.split(chr(10)))}
+---
+
+"""
+        original = Path(path).read_text(encoding="utf-8")
+        if not original.startswith("---"):
+            Path(path).write_text(summary_block + original, encoding="utf-8")
+            print(f"Özetlendi: {path}")
+
+# İzleyici başlat
+observer = Observer()
+observer.schedule(NoteHandler(llm), str(VAULT_PATH), recursive=True)
+observer.start()
+print(f"Vault izleniyor: {VAULT_PATH}")
+
+try:
+    while True:
+        time.sleep(1)
+except KeyboardInterrupt:
+    observer.stop()
+observer.join()
+```
+
+### Adım 4 — MCP ile Claude Code Entegrasyonu
+
+Claude Code, [MCP (Model Context Protocol)](/kavramlar/mcp-protokol) sayesinde Obsidian vault'una doğrudan erişebilir:
+
+```json
+// ~/.claude/claude_desktop_config.json
+{
+  "mcpServers": {
+    "obsidian": {
+      "command": "npx",
+      "args": ["-y", "obsidian-mcp-server"],
+      "env": {
+        "VAULT_PATH": "/Users/kullanici/Documents/ObsidianVault"
+      }
+    }
+  }
+}
+```
+
+Bu yapılandırmayla Claude Code'a `"Vault'umda geçen ay aldığım tüm toplantı notlarını özetle"` gibi komutlar verebilirsiniz.
+
+---
+
+## No-Code Alternatif (n8n)
+
+<details>
+<summary>n8n otomatik not etiketleme pipeline'ı</summary>
+
+1. **Webhook trigger:** Obsidian webhook eklentisiyle yeni not oluşturulunca tetikle.
+2. **HTTP Request:** Not içeriğini al.
+3. **AI Agent node:** Claude ile özetleme ve etiket önerisi.
+4. **Obsidian API node veya File Write:** Özeti nota ekle.
+5. **Notion Database node (opsiyonel):** Özetlenmiş notu Notion'a da kaydet.
+
+</details>
+
+---
+
+## İlgili Projeler
+
+- [/projeler/baslangic](/projeler/baslangic) — Obsidian vault'tan günlük özet çıkaran agent
+- [/projeler/orta](/projeler/orta) — Calendar + email + Notion entegre kişisel asistan
+- [/entegrasyonlar/obsidian](/entegrasyonlar/obsidian) — Obsidian entegrasyon rehberi
+
+<Callout type="not">
+Kişisel notlarınız hassas veri içerebilir. Bulut tabanlı modellere göndermeden önce gizlilik politikasını inceleyin. Tamamen gizli notlar için yerel modeller (Ollama + Llama 3) tercih edin.
+</Callout>

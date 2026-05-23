@@ -1,0 +1,296 @@
+---
+title: "Veri Toplama ve ETL Pipeline'ı ile Akıllı Veri İşleme"
+slug: veri-toplama
+category: senaryolar
+level: orta
+summary: "Web kazıma (scraping), API entegrasyonu ve yapılandırılmamış veriden yapılandırılmış veri çıkarma süreçlerini ajan tabanlı yaklaşımla kurma; Airtable, Google Sheets ve veritabanlarına otomatik besleme."
+updated: 2026-05-23
+tags: ["veri-toplama", "scraping", "etl", "n8n", "langgraph", "rag"]
+related: ["arastirma", "otomasyon", "kisisel-bilgi-yonetimi"]
+---
+
+## Senaryo Tanımı
+
+Veri toplama (data collection) ve ETL (Extract-Transform-Load) senaryosu, dağınık kaynaklardan veri derleyen, temizleyen ve hedef sistemlere aktaran ajan tabanlı pipeline'ları kapsar. Geleneksel ETL araçlarına kıyasla ajan tabanlı yaklaşımın güçlü yanı, belirsiz veya yarı yapılandırılmış verilerden (PDF tablolar, HTML sayfalar, e-postalar) bile anlamlı veri çıkarabilmesidir.
+
+Tipik kullanım durumları:
+- Rakip fiyat ve ürün takibi
+- İş ilanı toplayıcı ve analiz aracı
+- Akademik makale metadata çıkarımı
+- Haber ve sosyal medya izleme
+- Muhasebe belgelerinden veri çıkarma
+- Pazar araştırması veri ambarı oluşturma
+
+<Callout type="info">
+Bu senaryo orta seviye olarak sınıflandırılmıştır. Temel Python bilgisi ve bir veritabanına ya da Airtable/Google Sheets'e erişim gereklidir. No-code alternatifler de mevcuttur.
+</Callout>
+
+---
+
+## Hangi Araçlar Uygundur?
+
+| Araç | Kullanım amacı | Bağlantı |
+|---|---|---|
+| LangGraph | Durable, checkpoint'li ETL grafikleri | [/araclar/langgraph](/araclar/langgraph) |
+| n8n | No-code web scraping + veri dönüşüm pipeline'ı | [/araclar/n8n](/araclar/n8n) |
+| Make | SaaS API entegrasyonu + veri aktarımı | [/araclar/make](/araclar/make) |
+| Claude Agent SDK | Yapılandırılmamış veri çıkarımı için özel ajan | [/araclar/claude-agent-sdk](/araclar/claude-agent-sdk) |
+| Google Antigravity 2.0 | Browser tool ile canlı web verisi toplama | [/araclar/google-antigravity](/araclar/google-antigravity) |
+
+**Model önerisi:** Yapı çıkarımı (extraction) için Claude Haiku 3.5 (hızlı ve ucuz); karmaşık anlam çıkarımı için Sonnet 4.5.
+
+---
+
+## Önerilen Workflow Deseni
+
+Veri toplama için **Plan-and-Execute** ile **Scheduled Agent** desenlerini birleştirin: ajan kaynakları planlar, paralel toplar ve zamanlanmış görev olarak çalışır.
+
+Detaylı desen açıklaması: [/workflow/desenler](/workflow/desenler)
+
+```
+[Zamanlanmış tetikleyici (cron)]
+          ↓
+[Kaynak belirleme ajanı]
+  → hangi URL'ler, hangi API'ler?
+          ↓
+[Paralel toplama worker'ları]
+  ├── scrape_url(url_1)
+  ├── scrape_url(url_2)
+  └── fetch_api(endpoint)
+          ↓
+[Temizleme ve dönüştürme ajanı]
+  → yapılandırılmamış → yapılandırılmış
+          ↓
+[Doğrulama ajanı]
+  → eksik alan, geçersiz değer kontrolü
+          ↓
+[Yükleme (load)]
+  → Airtable / Google Sheets / PostgreSQL
+          ↓
+[Bildirim: yeni veri özeti]
+```
+
+---
+
+## Adım Adım Örnek
+
+### Hedef
+Birden fazla iş ilan sitesinden "yapay zeka geliştirici" ilanlarını topla, yapılandır ve Google Sheets'e kaydet.
+
+### Adım 1 — Kurulum
+
+```bash
+pip install anthropic httpx beautifulsoup4 gspread google-auth
+```
+
+### Adım 2 — Web Kazıma ve Yapı Çıkarımı Agent'ı
+
+```python
+import asyncio
+import httpx
+from bs4 import BeautifulSoup
+import anthropic
+import json
+from typing import TypedDict, Optional
+
+client = anthropic.Anthropic()
+
+async def fetch_page(url: str) -> str:
+    """Web sayfasını çek."""
+    async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as http:
+        headers = {"User-Agent": "Mozilla/5.0 (compatible; ResearchBot/1.0)"}
+        response = await http.get(url, headers=headers)
+        response.raise_for_status()
+        return response.text
+
+def extract_text(html: str) -> str:
+    """HTML'den temiz metin çıkar."""
+    soup = BeautifulSoup(html, "html.parser")
+    # Script ve style etiketlerini kaldır
+    for tag in soup(["script", "style", "nav", "footer"]):
+        tag.decompose()
+    return soup.get_text(separator="\n", strip=True)[:3000]
+
+def extract_job_data(page_text: str, source_url: str) -> Optional[dict]:
+    """LLM ile iş ilanı verilerini yapılandır."""
+    prompt = f"""Aşağıdaki iş ilanı metninden bilgileri çıkar ve JSON olarak döndür.
+Eksik alanlar için null kullan.
+
+Beklenen format:
+{{
+  "baslik": "İş pozisyonu başlığı",
+  "sirket": "Şirket adı",
+  "konum": "Şehir veya uzak (remote)",
+  "maas_min": null veya sayı (TL/ay),
+  "maas_max": null veya sayı (TL/ay),
+  "gereksinimler": ["beceri1", "beceri2"],
+  "ilan_tarihi": "YYYY-MM-DD veya null",
+  "kaynak": "{source_url}"
+}}
+
+İlan metni:
+{page_text}
+
+Sadece JSON döndür, başka metin ekleme."""
+
+    response = client.messages.create(
+        model="claude-haiku-3-5",
+        max_tokens=500,
+        messages=[{"role": "user", "content": prompt}]
+    )
+    
+    try:
+        return json.loads(response.content[0].text)
+    except json.JSONDecodeError:
+        return None
+
+# --- Ana pipeline ---
+job_urls = [
+    "https://example-jobs.com/ai-developer-1",  # Gerçek URL'lerle değiştirin
+    "https://example-jobs.com/ai-developer-2",
+]
+
+async def collect_jobs(urls: list[str]) -> list[dict]:
+    jobs = []
+    for url in urls:
+        try:
+            html = await fetch_page(url)
+            text = extract_text(html)
+            job = extract_job_data(text, url)
+            if job:
+                jobs.append(job)
+                print(f"Toplandı: {job.get('baslik', 'Bilinmeyen')} - {job.get('sirket', '?')}")
+        except Exception as e:
+            print(f"Hata ({url}): {e}")
+    return jobs
+
+jobs = asyncio.run(collect_jobs(job_urls))
+print(f"\nToplam {len(jobs)} ilan toplandı.")
+```
+
+<Callout type="ipucu">
+Büyük ölçekli kazıma için `asyncio` ile paralel istekler gönderin. Ancak her sitenin `robots.txt` dosyasını ve kullanım koşullarını kontrol edin. Aşırı istek göndermemek için `asyncio.sleep()` ekleyin.
+</Callout>
+
+### Adım 3 — Google Sheets'e Yükleme
+
+```python
+import gspread
+from google.oauth2.service_account import Credentials
+
+def upload_to_sheets(data: list[dict], spreadsheet_id: str):
+    """Veriyi Google Sheets'e yükle."""
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
+    creds = Credentials.from_service_account_file("service_account.json", scopes=scopes)
+    gc = gspread.authorize(creds)
+    
+    sh = gc.open_by_key(spreadsheet_id)
+    ws = sh.worksheet("İlanlar")
+    
+    if not data:
+        return
+    
+    # Başlık satırı
+    headers = list(data[0].keys())
+    if ws.row_count == 1:
+        ws.append_row(headers)
+    
+    # Veri satırları
+    rows = [[str(row.get(h, "")) for h in headers] for row in data]
+    ws.append_rows(rows)
+    print(f"{len(rows)} satır eklendi.")
+
+# upload_to_sheets(jobs, "YOUR_SPREADSHEET_ID")
+```
+
+### Adım 4 — LangGraph ile Durable Pipeline
+
+Uzun süren veri toplama görevleri için LangGraph'ın checkpoint özelliği kritiktir:
+
+```python
+from langgraph.graph import StateGraph, END
+from langgraph.checkpoint.sqlite import SqliteSaver
+from typing import TypedDict, List
+
+class ETLState(TypedDict):
+    urls_pending: List[str]
+    urls_done: List[str]
+    collected_data: List[dict]
+    errors: List[str]
+
+def fetch_next_url(state: ETLState) -> ETLState:
+    """Bir sonraki URL'yi işle."""
+    if not state["urls_pending"]:
+        return state
+    
+    url = state["urls_pending"][0]
+    remaining = state["urls_pending"][1:]
+    
+    try:
+        # Kazıma ve çıkarım işlemleri
+        data = {"url": url, "status": "ok"}  # Gerçek implementasyon yukarıda
+        return {
+            **state,
+            "urls_pending": remaining,
+            "urls_done": state["urls_done"] + [url],
+            "collected_data": state["collected_data"] + [data]
+        }
+    except Exception as e:
+        return {
+            **state,
+            "urls_pending": remaining,
+            "errors": state["errors"] + [f"{url}: {e}"]
+        }
+
+def should_continue(state: ETLState) -> str:
+    return "fetch" if state["urls_pending"] else END
+
+# Checkpoint ile graph
+memory = SqliteSaver.from_conn_string("etl_checkpoint.db")
+
+graph = StateGraph(ETLState)
+graph.add_node("fetch", fetch_next_url)
+graph.set_entry_point("fetch")
+graph.add_conditional_edges("fetch", should_continue)
+
+app = graph.compile(checkpointer=memory)
+
+# Thread ID ile çalıştır — kesilirse aynı thread_id ile devam eder
+config = {"configurable": {"thread_id": "job-collection-2026-05"}}
+result = app.invoke(
+    {"urls_pending": job_urls, "urls_done": [], "collected_data": [], "errors": []},
+    config
+)
+```
+
+---
+
+## No-Code Alternatif (n8n)
+
+<details>
+<summary>n8n veri toplama ve Airtable entegrasyonu</summary>
+
+1. **Schedule Trigger:** Her gün sabah 08:00'de tetikle.
+2. **HTTP Request node:** Hedef web sayfalarını çek.
+3. **HTML Extract node:** İlgili alanları seç.
+4. **AI node:** Yapılandırılmamış metinden JSON çıkar.
+5. **Filter node:** Yeni kayıtları filtrele (mükerrer önleme).
+6. **Airtable node:** Yeni kayıtları tabloya ekle.
+7. **Slack / Email:** Günlük özet bildir.
+
+</details>
+
+---
+
+## İlgili Projeler
+
+- [/projeler/orta](/projeler/orta) — Veri kazıma + sınıflandırma + Airtable doldurma pipeline
+- [/projeler/baslangic](/projeler/baslangic) — RSS okuyup haftalık bülten üreten agent
+- [/projeler/ileri](/projeler/ileri) — Multi-model router + maliyet optimizasyonu
+
+<Callout type="uyari">
+Web kazıma yaparken yasal kısıtlamalara dikkat edin. Bazı siteler `robots.txt` ile kazımayı yasaklar; ticari veriler için resmi API'leri tercih edin. KVKK kapsamında kişisel veri içeren sayfaları kazımaktan kaçının.
+</Callout>

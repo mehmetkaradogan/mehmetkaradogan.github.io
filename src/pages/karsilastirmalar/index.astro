@@ -1,0 +1,65 @@
+---
+// src/pages/karsilastirmalar/index.astro
+
+import BaseLayout from '@layouts/BaseLayout.astro';
+import Card from '@components/Card.astro';
+import Breadcrumb from '@components/Breadcrumb.astro';
+import { getCollection } from 'astro:content';
+
+const entries = await getCollection('karsilastirmalar', (e) => !e.data.draft);
+const sorted = entries.sort((a, b) => a.data.title.localeCompare(b.data.title, 'tr'));
+---
+
+<BaseLayout
+  title="Karşılaştırmalar"
+  description="Agentic AI araç karşılaştırmaları: LangGraph vs CrewAI, Claude Code vs Codex, n8n vs Make ve daha fazlası."
+>
+  <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <Breadcrumb crumbs={[{ label: 'Karşılaştırmalar' }]} />
+
+    <header class="mb-8">
+      <h1 class="text-3xl font-bold" style="color: var(--text-primary);">Karşılaştırmalar</h1>
+      <p class="mt-2 text-base" style="color: var(--text-secondary);">
+        Araçlar arasında karar vermek mi zor? Yan yana analizler ve karar rehberleri.
+      </p>
+    </header>
+
+    <!-- Pinned: Hangi Araç Ne Zaman -->
+    <div class="mb-6 p-4 rounded-xl border-2 flex items-start gap-4" style="border-color: var(--brand); background-color: var(--color-primary-50);">
+      <div class="flex-1">
+        <span class="text-xs font-bold uppercase tracking-wide" style="color: var(--brand);">Öne Çıkan</span>
+        <h2 class="font-bold text-base mt-1" style="color: var(--text-primary);">Hangi Araç Ne Zaman?</h2>
+        <p class="text-sm mt-1" style="color: var(--text-secondary);">
+          İnteraktif karar ağacı ile ihtiyacınıza göre araç önericisi.
+        </p>
+      </div>
+      <a
+        href="/karsilastirmalar/hangi-arac-ne-zaman"
+        class="shrink-0 px-4 py-2 rounded-lg font-semibold text-sm text-white"
+        style="background-color: var(--brand);"
+      >
+        Karar ver →
+      </a>
+    </div>
+
+    {sorted.length > 0 ? (
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {sorted.map((entry) => (
+          <Card
+            title={entry.data.title}
+            summary={entry.data.summary}
+            href={`/karsilastirmalar/${entry.slug}`}
+            level={entry.data.level}
+            tags={entry.data.tags}
+            updated={entry.data.updated}
+          />
+        ))}
+      </div>
+    ) : (
+      <div class="rounded-xl border p-12 text-center" style="border-color: var(--border-color); background-color: var(--bg-surface);">
+        <p class="text-lg font-semibold" style="color: var(--text-primary);">Yakında</p>
+        <p class="mt-2 text-sm" style="color: var(--text-secondary);">Karşılaştırma sayfaları hazırlanıyor.</p>
+      </div>
+    )}
+  </div>
+</BaseLayout>

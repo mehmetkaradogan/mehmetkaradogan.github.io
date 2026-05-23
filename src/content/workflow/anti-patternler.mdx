@@ -1,0 +1,453 @@
+---
+title: "Agentic AI Anti-Patternler: Yaygın Hatalar ve Çözümleri"
+slug: anti-patternler
+category: workflow
+level: orta
+summary: "Agentic AI sistemlerinde en sık yapılan hatalar: gereksiz multi-agent, yanlış model seçimi, checkpoint eksikliği, eval yokluğu ve daha fazlası. Her anti-pattern için somut düzeltme yöntemi."
+updated: 2026-05-23
+tags: [anti-pattern, hata, debugging, maliyet, checkpoint, eval, multi-agent, model-secimi, best-practice]
+related: [desenler, multi-model-stratejileri, ornekler]
+---
+
+## Neden Anti-Pattern'leri Öğrenmek?
+
+En iyi desen bilgisi bile üretimde yaygın tuzaklara yakalanmayı engellemez. Bu sayfa sahada gözlemlenen ve ciddi maliyet, güvenilirlik ve bakım sorunlarına yol açan hataları belgeliyor. Her anti-pattern için: nasıl tanınır, neden oluşur, nasıl düzeltilir.
+
+---
+
+## Anti-Pattern 1: Gereksiz Multi-Agent (Over-Engineering)
+
+### Belirtiler
+
+- Basit bir soru-yanıt görevi için 4+ ajan kurulmuş.
+- Her ajan yalnızca bir öncekinin çıktısını kopyalayıp bir sonrakine iletiyor.
+- Sistem karmaşık görünüyor ama tek bir iyi yazılmış prompt daha iyi sonuç veriyor.
+
+### Neden Oluşur?
+
+"Çok ajan = daha akıllı sistem" yanılgısı. Agentic mimari her soruna çözüm değildir. Bazı görevler tek bir iyi yapılandırılmış LLM çağrısıyla çözülür.
+
+### Kötü Örnek
+
+```python
+# YANLIŞ: 4 ajan, aslında tek iş yapıyor
+ajan1 = Agent(role="Soru anlayıcı", goal="Soruyu anla")
+ajan2 = Agent(role="Yanıt planlayıcı", goal="Yanıt planı yap")
+ajan3 = Agent(role="Yanıt yazıcı", goal="Yanıtı yaz")
+ajan4 = Agent(role="Yanıt kontrol", goal="Yanıtı kontrol et")
+
+# Bu 4 ajan aslında tek bir iyi prompt ile yapılabilir
+```
+
+### Düzeltme
+
+```python
+# DOĞRU: Tek, iyi yapılandırılmış çağrı
+yanit = llm.invoke("""
+Şu soruyu yanıtla. Yanıtlamadan önce:
+1. Sorunun tam olarak ne istediğini düşün
+2. Yanıt yapısını planla
+3. Yanıtı yaz
+4. Yanıtı gözden geçir
+
+Soru: {soru}
+""".format(soru=kullanici_sorusu))
+```
+
+**Kural:** Multi-agent sistemi yalnızca görevler gerçekten paralel yürütülebiliyorsa, farklı araçlara erişim gerekiyorsa veya farklı uzmanlık alanları söz konusuysa kullanın.
+
+<Callout type="uyari">
+Her ajan katmanı maliyet, gecikme ve hata olasılığı ekler. "Bu ajan gerçekten değer katıyor mu?" sorusunu her ajan için sorun.
+</Callout>
+
+---
+
+## Anti-Pattern 2: Her Şey İçin En Güçlü Model
+
+### Belirtiler
+
+- Tüm ajan çağrıları Opus veya eşdeğeri en pahalı modelle yapılıyor.
+- Lint kontrolü, format dönüşümü, sınıflandırma gibi basit görevler için de güçlü model kullanılıyor.
+- Aylık fatura beklenmedik seviyelerde.
+
+### Neden Oluşur?
+
+"En iyisini kullan, güvenli ol" mantığı. Oysa basit görevler için güçlü model ne kaliteyi artırır ne de riski azaltır.
+
+### Maliyet Karşılaştırması
+
+```
+Senaryo: 1000 günlük metin sınıflandırma görevi
+Her biri ~500 token
+
+Opus ile: 1000 × 500 token × $15/M = $7.50/gün = $225/ay
+Haiku ile: 1000 × 500 token × $0.25/M = $0.125/gün = $3.75/ay
+
+Tasarruf: %98.3 — sınıflandırma kalitesi farkı: ihmal edilebilir
+```
+
+### Düzeltme
+
+```python
+# Model atama matrisi — her göreve uygun model
+GOREV_MODELI = {
+    "siniflandirma": "claude-haiku-4",
+    "ozet": "claude-haiku-4",
+    "format_donusumu": "claude-haiku-4",
+    "kod_inceleme_kisa": "claude-sonnet-4-5",
+    "kod_yazma": "claude-sonnet-4-5",
+    "mimari_karar": "claude-opus-4",
+    "karmasik_analiz": "claude-opus-4",
+    "guvenlikkritik": "claude-opus-4"
+}
+
+def gorev_modeli_sec(gorev_turu: str) -> str:
+    return GOREV_MODELI.get(gorev_turu, "claude-sonnet-4-5")
+```
+
+Detaylı model seçim rehberi: [Multi-Model Stratejileri](/workflow/multi-model-stratejileri).
+
+---
+
+## Anti-Pattern 3: Checkpoint Eksikliği (State Kayıp)
+
+### Belirtiler
+
+- Uzun süreli görev ortasında sistem çöküyor, baştan başlanıyor.
+- Kullanıcı ajan ile konuşuyor, bağlantı kopuyor, tüm bağlam kayboluyor.
+- "Checkpoint nedir?" sorusuna cevap verilemiyor.
+
+### Neden Oluşur?
+
+Kısa görevlerde checkpoint gereksiz görünür. Ama üretim sistemlerinde ağ hataları, model timeout'ları ve sistem yeniden başlatmaları kaçınılmazdır.
+
+### Kötü Örnek
+
+```python
+# YANLIŞ: Checkpoint yok, her şey bellekte
+def uzun_gorev_calistir(gorev):
+    sonuc = []
+    for adim in gorev.adimlar:  # 50 adım
+        sonuc.append(ajan.isle(adim))  # 40. adımda çökerse başa dön
+    return sonuc
+```
+
+### Düzeltme (LangGraph ile)
+
+```python
+from langgraph.graph import StateGraph, END
+from langgraph.checkpoint.sqlite import SqliteSaver
+from typing import TypedDict
+
+class GorevState(TypedDict):
+    adimlar: list
+    tamamlanan: list
+    mevcut_adim: int
+
+def adim_isle(state: GorevState) -> GorevState:
+    adim = state["adimlar"][state["mevcut_adim"]]
+    sonuc = ajan.isle(adim)
+    return {
+        "tamamlanan": state["tamamlanan"] + [sonuc],
+        "mevcut_adim": state["mevcut_adim"] + 1
+    }
+
+def bitti_mi(state: GorevState) -> str:
+    return "bitti" if state["mevcut_adim"] >= len(state["adimlar"]) else "devam"
+
+graph = StateGraph(GorevState)
+graph.add_node("adim_isle", adim_isle)
+graph.set_entry_point("adim_isle")
+graph.add_conditional_edges("adim_isle", bitti_mi, {"bitti": END, "devam": "adim_isle"})
+
+# SQLite checkpoint — çöküp yeniden başlayınca kaldığı yerden devam eder
+with SqliteSaver.from_conn_string("gorevler.db") as checkpointer:
+    app = graph.compile(checkpointer=checkpointer)
+    
+    config = {"configurable": {"thread_id": "gorev-001"}}
+    sonuc = app.invoke(baslangic_durumu, config=config)
+    # Çöküp yeniden başlatınca:
+    # sonuc = app.invoke(None, config=config)  # Kaldığı yerden devam
+```
+
+<Callout type="ipucu">
+Checkpoint yalnızca uzun görevler için değil; birden fazla oturuma yayılan her iş akışı için zorunludur. LangGraph'ta `MemorySaver` (test için) veya `SqliteSaver` / `PostgresSaver` (üretim için) kullanın.
+</Callout>
+
+---
+
+## Anti-Pattern 4: Eval (Değerlendirme) Yokluğu
+
+### Belirtiler
+
+- Sistem "çalışıyor gibi görünüyor" ama gerçekten ne kadar iyi bilinmiyor.
+- Model versiyonu güncellendi; sistem davranışı değişti mi belli değil.
+- Hata oranı takip edilmiyor.
+
+### Neden Oluşur?
+
+Eval kurmak zaman alır ve başlangıçta gereksiz görünür. Ama üretimde eval olmadan iyileştirme körce yapılır.
+
+### Minimal Eval Çerçevesi
+
+```python
+import json
+from datetime import datetime
+from typing import Callable
+
+class MinimalEval:
+    def __init__(self, test_dosyasi: str):
+        with open(test_dosyasi) as f:
+            self.test_vakalari = json.load(f)
+        self.sonuclar = []
+    
+    def calistir(self, sistem_fonksiyonu: Callable) -> dict:
+        dogru = 0
+        for vaka in self.test_vakalari:
+            gercek_cikti = sistem_fonksiyonu(vaka["girdi"])
+            beklenen = vaka["beklenen_cikti"]
+            
+            # Basit eşleşme (gerçek projede LLM-as-judge kullanın)
+            dogru_mu = beklenen.lower() in gercek_cikti.lower()
+            
+            self.sonuclar.append({
+                "girdi": vaka["girdi"],
+                "beklenen": beklenen,
+                "gercek": gercek_cikti,
+                "dogru": dogru_mu
+            })
+            
+            if dogru_mu:
+                dogru += 1
+        
+        basari_orani = dogru / len(self.test_vakalari)
+        return {
+            "basari_orani": basari_orani,
+            "dogru": dogru,
+            "toplam": len(self.test_vakalari),
+            "tarih": datetime.now().isoformat()
+        }
+
+# Test vaka dosyası: test_vakalari.json
+# [{"girdi": "...", "beklenen_cikti": "..."}]
+
+eval = MinimalEval("test_vakalari.json")
+sonuclar = eval.calistir(benim_sistem_fonksiyonum)
+print(f"Başarı oranı: {sonuclar['basari_orani']:.1%}")
+```
+
+### LLM-as-Judge Pattern
+
+```python
+def llm_hakem(soru: str, beklenen: str, gercek: str) -> float:
+    """LLM, sistemin çıktısını değerlendirir"""
+    degerlendirme = haiku.invoke(f"""
+Bir AI sisteminin çıktısını değerlendir.
+
+Soru: {soru}
+Beklenen yanıt tarzı: {beklenen}
+Sistemin verdiği yanıt: {gercek}
+
+0.0 (tamamen yanlış) ile 1.0 (mükemmel) arasında puan ver.
+Sadece sayıyı yaz:
+""")
+    return float(degerlendirme.strip())
+```
+
+---
+
+## Anti-Pattern 5: Sonsuz Döngü / Timeout Yok
+
+### Belirtiler
+
+- Ajan takılıp kalıyor; sonsuz araç çağrısı yapıyor.
+- API maliyeti saatler içinde tahmin edilemez seviyeye çıkıyor.
+- Sistem dışarıdan durdurulamıyor.
+
+### Düzeltme
+
+```python
+def guvenli_ajan_dongu(gorev: str, max_adim: int = 20, timeout_sn: int = 300):
+    import time
+    
+    baslangic = time.time()
+    adim_sayaci = 0
+    gecmis = [{"role": "user", "content": gorev}]
+    
+    while adim_sayaci < max_adim:
+        # Timeout kontrolü
+        if time.time() - baslangic > timeout_sn:
+            return {"hata": "Timeout", "tamamlanan_adim": adim_sayaci}
+        
+        yanit = llm.invoke(gecmis)
+        
+        if yanit.stop_reason == "end_turn":
+            return {"sonuc": yanit.content, "adim": adim_sayaci}
+        
+        # Araç çağrısını işle
+        gecmis.append({"role": "assistant", "content": yanit.content})
+        adim_sayaci += 1
+    
+    return {"hata": "Max adım aşıldı", "tamamlanan_adim": adim_sayaci}
+```
+
+---
+
+## Anti-Pattern 6: Hata İşleme Yokluğu
+
+### Belirtiler
+
+- Bir araç çağrısı başarısız olduğunda tüm sistem çöküyor.
+- Kullanıcıya ham hata mesajı gösteriliyor.
+- Yeniden deneme (retry) mekanizması yok.
+
+### Düzeltme
+
+```python
+import time
+from functools import wraps
+
+def yeniden_dene(max_deneme: int = 3, bekleme_sn: float = 1.0):
+    """Dekoratör: başarısız API çağrılarını yeniden dener"""
+    def dekorator(fonksiyon):
+        @wraps(fonksiyon)
+        def sarmalayici(*args, **kwargs):
+            for deneme in range(max_deneme):
+                try:
+                    return fonksiyon(*args, **kwargs)
+                except Exception as hata:
+                    if deneme == max_deneme - 1:
+                        raise hata
+                    bekleme = bekleme_sn * (2 ** deneme)  # Exponential backoff
+                    time.sleep(bekleme)
+        return sarmalayici
+    return dekorator
+
+@yeniden_dene(max_deneme=3, bekleme_sn=1.0)
+def api_cagri(girdi: str) -> str:
+    return llm.invoke(girdi)
+
+# Graceful degradation
+def guvenli_arac_cagri(arac, girdi):
+    try:
+        return arac.invoke(girdi)
+    except Exception as hata:
+        # Hata logla, kullanıcıya anlamlı mesaj ver
+        print(f"Araç hatası: {hata}")
+        return {"hata": True, "mesaj": "Araç geçici olarak kullanılamıyor"}
+```
+
+---
+
+## Anti-Pattern 7: Bağlam Penceresi Yönetimi İhmali
+
+### Belirtiler
+
+- Uzun konuşmalar sonunda "context length exceeded" hatası.
+- Ajan eski mesajları "unutuyor" gibi davranıyor.
+- Her çağrı tüm geçmişi taşıyor; maliyet katlanarak artıyor.
+
+### Düzeltme
+
+```python
+def bagiam_penceresi_yonet(mesajlar: list, max_token: int = 50000) -> list:
+    """Bağlam penceresini token limitinin altında tutar"""
+    
+    # Yaklaşık token sayımı (gerçekte tiktoken kullanın)
+    toplam_token = sum(len(m["content"].split()) * 1.3 for m in mesajlar)
+    
+    if toplam_token <= max_token:
+        return mesajlar
+    
+    # Strateji: İlk mesajı (sistem) koru, ortaları özetle
+    sistem_mesaji = mesajlar[0] if mesajlar[0]["role"] == "system" else None
+    son_mesajlar = mesajlar[-10:]  # Son 10 mesajı koru
+    
+    # Ortadakileri özetle
+    orta_mesajlar = mesajlar[1:-10] if sistem_mesaji else mesajlar[:-10]
+    if orta_mesajlar:
+        ozet = haiku.invoke(
+            f"Şu konuşmayı 3 cümlede özetle: {str(orta_mesajlar)}"
+        )
+        ozet_mesaj = {"role": "assistant", "content": f"[Önceki konuşma özeti: {ozet.content}]"}
+        
+        if sistem_mesaji:
+            return [sistem_mesaji, ozet_mesaj] + son_mesajlar
+        return [ozet_mesaj] + son_mesajlar
+    
+    return son_mesajlar
+
+# Detaylı rehber: /kavramlar/model-context-management
+```
+
+<Callout type="not">
+Bağlam penceresi yönetimi hakkında kapsamlı rehber için bkz. [Model Context Management](/kavramlar/model-context-management).
+</Callout>
+
+---
+
+## Anti-Pattern 8: AutoGen ile Yeni Proje Başlatmak
+
+### Belirtiler
+
+- Yeni proje için AutoGen (pyautogen) seçilmiş.
+- Topluluk desteği zayıflıyor, yeni model entegrasyonu geç geliyor.
+- Microsoft belgelerinde AutoGen yerine Microsoft Agent Framework yönlendiriliyor.
+
+### Düzeltme
+
+AutoGen bakım modundadır. Yeni projeler için:
+
+- Üretim → **LangGraph** + LangSmith
+- Prototip → **CrewAI**
+- Anthropic ekosistemi → **Claude Agent SDK**
+- OpenAI ekosistemi → **OpenAI Agents SDK**
+
+Mevcut AutoGen kodlarını taşıma planı yapın; hemen taşımak zorunda değilsiniz ama uzun vadeli yatırım yapmayın.
+
+Karşılaştırma detayı: [LangGraph vs CrewAI vs AutoGen](/karsilastirmalar/langgraph-vs-crewai-vs-autogen).
+
+---
+
+## Anti-Pattern Hızlı Referans
+
+| Anti-Pattern | Belirti | Hızlı Düzeltme |
+|---|---|---|
+| Gereksiz multi-agent | 4+ ajan, basit görev | Tek prompt ile test et |
+| Her şey Opus | Yüksek fatura, basit görevler | Model atama matrisi kur |
+| Checkpoint yok | Çöküşte başa dön | LangGraph + SqliteSaver |
+| Eval yok | Kalite bilinmiyor | 20 test vakası yaz |
+| Sonsuz döngü | Takılı ajan, maliyet patlaması | max_iterations + timeout |
+| Hata işleme yok | Tek hata = sistem çöküşü | Retry + graceful degrade |
+| Bağlam ihmali | "Context exceeded" hatası | Özetleme + pencere yönetimi |
+| AutoGen yeni proje | Azalan topluluk, geç güncelleme | LangGraph veya CrewAI'ye geç |
+
+---
+
+## Önleme Checklist
+
+Her yeni agentic sistem kurmadan önce:
+
+<details>
+<summary>Tasarım aşaması kontrolleri</summary>
+
+- Bu görev gerçekten multi-agent mı gerektiriyor, yoksa tek iyi prompt yeterli mi?
+- Her ajan için en ucuz yeterli model seçildi mi?
+- Checkpoint mekanizması planlandı mı?
+- Maksimum döngü sayısı ve timeout belirlendi mi?
+- Hata durumunda ne olacak planlandı mı?
+
+</details>
+
+<details>
+<summary>Üretim öncesi kontroller</summary>
+
+- En az 20 test vakası hazır mı?
+- Başarı metriği tanımlandı mı?
+- Maliyet tahmini yapıldı mı?
+- Gözlemlenebilirlik (logging/tracing) kuruldu mu?
+- Alert mekanizması var mı?
+
+</details>
+
+Daha fazla örnek için bkz. [Workflow Örnekleri](/workflow/ornekler) ve [Workflow Desenleri](/workflow/desenler).

@@ -1,0 +1,199 @@
+---
+title: "Agentic AI Framework Seçim Rehberi"
+slug: framework-secim-rehberi
+category: karsilastirmalar
+level: orta
+summary: "Hangi agentic AI framework ve aracı kullanmalısınız? Senaryo, ekip büyüklüğü, teknik olgunluk ve bütçe kriterlerine göre sistematik karar rehberi."
+updated: 2026-05-23
+tags: [framework, karar, langgraph, crewai, claude-code, antigravity, n8n, make, zapier, seçim-rehberi]
+related: [langgraph-vs-crewai-vs-autogen, claude-code-vs-codex-vs-antigravity, n8n-vs-make-vs-zapier]
+tools: ["langgraph", "crewai", "autogen", "claude-code", "openai-codex", "google-antigravity", "n8n", "make", "zapier", "openai-agents-sdk", "claude-agent-sdk"]
+---
+
+## Nereden Başlamalısınız?
+
+Agentic AI araçları hızla çoğalıyor ve her birinin reklamı "her şeyi yapabilir" vaadini içeriyor. Bu rehber o vaatleri bir kenara bırakıp somru sorularla doğru aracı bulmanıza yardımcı olur.
+
+Karar sürecini üç katmana böldük:
+
+1. **Ne yapmak istiyorsunuz?** — Kullanım senaryosu
+2. **Kimsiniz?** — Teknik profil ve ekip
+3. **Kısıtlarınız neler?** — Bütçe, veri gizliliği, üretim gereksinimleri
+
+---
+
+## Katman 1: Kullanım Senaryosu
+
+### Kod Yazmak / Yazılım Geliştirmek
+
+| Alt senaryo | Önerilen araç | Neden |
+|---|---|---|
+| Terminal'den büyük kod tabanı refactoring | Claude Code | 1M token bağlam, çok dosyalı değişiklik, MCP native |
+| Browser'da end-to-end test otomasyonu | OpenAI Codex | Computer use birinci sınıf özellik |
+| Gemini ekosistemi, görsel IDE, ücretsiz başlangıç | Google Antigravity 2.0 | Plan Mode, yerleşik browser tool, ücretsiz preview |
+| Yalnızca kod tamamlama (completion) | Cursor | AI-first editor; agent yetenekleri sınırlı |
+
+### Çok Ajanlı (Multi-Agent) Sistem Kurmak
+
+| Alt senaryo | Önerilen araç | Neden |
+|---|---|---|
+| Üretim sistemi, denetlenebilirlik şart | LangGraph + LangSmith | StateGraph, checkpoint, trace, kurumsal kullanım |
+| 1 günde çalışan prototip | CrewAI | Rol tabanlı sezgisel API, hız öncelikli |
+| Mevcut AutoGen kodu | AutoGen (okuma modunda) | Yeni proje için kullanmayın; bakım modunda |
+| Anthropic ekosistemi, birinci taraf | Claude Agent SDK | Subagent, Agent Teams, MCP native |
+| OpenAI ekosistemi, birinci taraf | OpenAI Agents SDK | Yapılandırılmış araç çağırma, Assistants v2 |
+
+### İş Akışı Otomasyonu (Kod yazmadan veya az kodla)
+
+| Alt senaryo | Önerilen araç | Neden |
+|---|---|---|
+| Self-host, veri gizliliği, AI agent | n8n | Docker kurulum, AI Agent node, özel kod |
+| Görsel senaryo, orta karmaşıklık | Make | Router, iterator, agregator modülleri |
+| No-code, 7000+ uygulama, hız | Zapier | En geniş entegrasyon kataloğu, sihirbaz arayüzü |
+
+---
+
+## Katman 2: Teknik Profil
+
+### Geliştirici (Developer)
+
+Kod yazıyorsunuz, API belgesi okuyabiliyorsunuz, terminal rahat hissettiriyor.
+
+**Önerilen yol:**
+- Agentic coding → Claude Code veya Codex
+- Framework → LangGraph (üretim) / CrewAI (prototip)
+- SDK → Claude Agent SDK veya OpenAI Agents SDK
+- Otomasyon → n8n
+
+### Teknik Okuryazar (Semi-Technical)
+
+Araçları kullanabiliyorsunuz, JSON anlayabiliyorsunuz ama framework kodu yazmak zor geliyor.
+
+**Önerilen yol:**
+- IDE → Antigravity 2.0 (görsel, ücretsiz)
+- Otomasyon → Make (görsel senaryo)
+- Framework → CrewAI (basit konfigürasyon)
+
+### No-Code Kullanıcı
+
+Teknik bilgi minimum, iş süreçlerini hızla otomatize etmek istiyorsunuz.
+
+**Önerilen yol:**
+- Otomasyon → Zapier
+- AI araçları → Antigravity 2.0 Plan Mode
+- Kod framework → Erken aşama; önce kavramları öğrenin
+
+---
+
+## Katman 3: Kısıtlar
+
+### Bütçe
+
+```
+Sıfır maliyet başlangıç:
+├── Antigravity 2.0 (ücretsiz preview)
+├── n8n self-host (sunucu hariç ücretsiz)
+└── CrewAI / LangGraph (açık kaynak)
+
+Düşük maliyet (ayda $0-50):
+├── Zapier Starter (görev limiti dikkatli)
+├── Make Core plan
+└── n8n cloud starter
+
+Orta maliyet (ayda $50-500):
+├── Claude Code (Pro + API token)
+├── LangGraph Cloud
+└── n8n Pro self-host
+
+Yüksek maliyet (ayda $500+):
+└── Üretim multi-agent sistemleri
+    (her agent çağrısı = model maliyeti)
+    → Mutlaka subagent başına model ataması yapın
+```
+
+<Callout type="uyari">
+Multi-agent sistemlerde her ajan arası mesaj bir model çağrısıdır. 5 ajan × Opus seviyesi model × 100 günlük çalışma = ciddi fatura. Subagent başına en ucuz yeterli modeli atayın. Detaylar: [Multi-Model Stratejileri](/workflow/multi-model-stratejileri).
+</Callout>
+
+### Veri Gizliliği
+
+| Gereksinim | Uygun araçlar | Uygun olmayan |
+|---|---|---|
+| Veri sunuculardan çıkmamalı | n8n self-host, LangGraph self-host | Zapier, Make cloud |
+| GDPR uyumu (Avrupa) | Make (AB veri merkezi), n8n self-host | Dikkatli değerlendirme gerekir |
+| SOC 2 / kurumsal | LangSmith Enterprise, OpenAI Enterprise | Startup tier'lar |
+
+### Üretim Gereksinimleri
+
+| Gereksinim | Önerilen |
+|---|---|
+| Yüksek erişilebilirlik (high availability) | LangGraph Cloud veya Kubernetes üzerinde self-host |
+| Denetlenebilirlik / audit trail | LangGraph + LangSmith |
+| İnsan onay noktası (HITL) | LangGraph interrupt node |
+| Ölçeklenebilirlik | LangGraph (paralel node), n8n (queue mode) |
+| Regülasyonlu sektör (finans, sağlık) | LangGraph + özel denetleme katmanı |
+
+---
+
+## Hızlı Karar Tablosu
+
+| Senaryo | İlk Tercih | İkinci Tercih |
+|---|---|---|
+| Tek geliştirici, terminal, kod yazıyor | Claude Code | Antigravity 2.0 |
+| Multi-agent prototip 1 günde | CrewAI | OpenAI Agents SDK |
+| Üretim, regülasyonlu sektör, denetlenebilir state | LangGraph + LangSmith | Claude Agent SDK |
+| Gemini ekosistemi, IDE içinde otonom agent | Antigravity 2.0 | — |
+| Kodsuz iş akışı, SaaS entegrasyonu | n8n (self-host) | Make (cloud) |
+| Browser otomasyonu odaklı | OpenAI Codex (computer use) | Claude Computer Use |
+| En geniş entegrasyon kataloğu, no-code | Zapier | Make |
+| Mevcut AutoGen kodu bakımı | AutoGen okuma + taşıma planı | LangGraph (taşıma hedefi) |
+
+---
+
+## Yaygın Tuzaklar
+
+**"Her şey için en güçlü modeli kullan" tuzağı:** Haiku'nun yapabileceği bir görev için Opus kullanmak maliyeti 10-20 kat artırır. Her ajan rolünü değerlendirin.
+
+**"Bir framework öğrenmek yeter" yanılgısı:** Üretim sistemleri genellikle birden fazla katman içerir: otomasyon platformu + orchestration framework + SDK + gözlemlenebilirlik aracı. Katmanları anlayın.
+
+**"AutoGen hâlâ aktif" yanılgısı:** Microsoft, AutoGen'i bakım moduna almıştır. Yeni proje başlatmayın; mevcut kodu taşıma planı yapın.
+
+**Erken optimizasyon:** Prototip aşamasında LangGraph'ın tüm özelliklerini kullanmaya çalışmak zaman kaybıdır. CrewAI ile başlayın, kanıtlandıkça LangGraph'a geçin.
+
+**Gözlemlenebilirlik ihmalı:** Üretim sisteminde trace ve loglama yoksa bir hata olduğunda nedenini bulmak saatlerce sürebilir. LangSmith veya eşdeğeri baştan kurulmalı.
+
+Daha fazla tuzak için bkz. [Anti-Patternler](/workflow/anti-patternler).
+
+---
+
+## Karar Ağacı
+
+```
+Ne yapmak istiyorsunuz?
+│
+├── Kod yazmak / geliştirmek
+│   ├── Terminal'i seviyorum → Claude Code
+│   ├── Browser otomasyonu gerekiyor → OpenAI Codex
+│   └── Görsel IDE, ücretsiz → Antigravity 2.0
+│
+├── Multi-agent sistem kurmak
+│   ├── Üretim + denetlenebilirlik → LangGraph + LangSmith
+│   ├── Prototip hızı → CrewAI
+│   ├── Anthropic 1. taraf → Claude Agent SDK
+│   └── OpenAI 1. taraf → OpenAI Agents SDK
+│
+└── Otomasyon (az/sıfır kod)
+    ├── Self-host + veri gizliliği → n8n
+    ├── Görsel + orta karmaşıklık → Make
+    └── No-code + max entegrasyon → Zapier
+```
+
+---
+
+## İlgili Karşılaştırmalar
+
+- [LangGraph vs CrewAI vs AutoGen](/karsilastirmalar/langgraph-vs-crewai-vs-autogen) — Orchestration framework detayı
+- [Claude Code vs Codex vs Antigravity](/karsilastirmalar/claude-code-vs-codex-vs-antigravity) — Agentic coding araçları detayı
+- [n8n vs Make vs Zapier](/karsilastirmalar/n8n-vs-make-vs-zapier) — Otomasyon platformları detayı
+- [Multi-Model Stratejileri](/workflow/multi-model-stratejileri) — Maliyet optimizasyonu
+- [Anti-Patternler](/workflow/anti-patternler) — Yaygın hatalar ve çözümleri

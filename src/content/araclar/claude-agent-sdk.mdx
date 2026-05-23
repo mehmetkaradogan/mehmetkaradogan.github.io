@@ -1,0 +1,310 @@
+---
+title: "Claude Agent SDK"
+slug: claude-agent-sdk
+category: araclar
+level: orta
+summary: "Anthropic'in birinci taraf ajan geliştirme kiti; subagent yönetimi, MCP entegrasyonu ve 1M token bağlam penceresiyle üretim kaliteli Claude ajanları inşa etmeyi sağlar."
+updated: 2026-05-23
+tags: ["sdk", "anthropic", "multi-agent", "mcp", "birinci-taraf"]
+related: ["claude-code", "openai-agents-sdk", "langgraph"]
+vendor: "Anthropic"
+toolType: "sdk"
+license: "MIT (açık kaynak)"
+os: ["macOS", "Linux", "Windows"]
+primary_model: "Claude Sonnet 4.5 / Opus 4 / Haiku 3"
+last_review: 2026-05-23
+status: "active"
+---
+
+## Nedir?
+
+Claude Agent SDK, Anthropic'in Claude modellerini ajan olarak kullanmak için sunduğu birinci taraf (first-party) geliştirme kitidir. Alt ajan (subagent) yönetimi, ajan ekipleri (agent teams), [MCP protokolü](/kavramlar/mcp-protokol) ile yerel entegrasyon ve 1 milyon token bağlam penceresi SDK'nın öne çıkan özelliklerindendir. Claude Code ile birlikte kullanıldığında yazılım geliştirme ajan sistemleri için kapsamlı bir ekosistem oluşturur. Güvenlik (safety) ve yorumlanabilirlik (interpretability) ön planda tutularak tasarlanmış olup, insan denetimi (human-in-the-loop) için yerleşik mekanizmalar içerir.
+
+## Ne için iyi
+
+- **Claude-first projeler:** Anthropic modellerinin tam potansiyelini kullanan sistemler.
+- **MCP entegrasyonu:** 200+ MCP sunucusuna (GitHub, Slack, Postgres, Stripe, Figma) yerel bağlantı.
+- **Subagent mimarisi:** Üst ajan altında uzmanlaşmış worker ajanları yönetme.
+- **Büyük bağlam:** 1M token penceresi ile devasa belgeler veya kod tabanlarını tek bağlamda işleme.
+- **Güvenlik odaklı:** Ajan davranışlarını kısıtlayan sistem düzeyinde güvenlik katmanları.
+- **Agent Teams:** Paralel çalışan ajan ekiplerini koordine etme.
+- **Scheduled agents:** Cron benzeri zamanlanmış ajan çalışmaları.
+
+## Ne için kötü
+
+- **OpenAI ekosistemi:** GPT modellerini merkeze alan projeler için OpenAI Agents SDK daha uygundur.
+- **Microsoft/.NET ekipları:** Semantic Kernel daha iyi Azure entegrasyonu sunar.
+- **No-code ihtiyaçları:** n8n veya Make daha uygun.
+- **Çok düşük gecikme gereksinimi:** Claude API, GPT-4o-mini'ye kıyasla daha yüksek gecikmeye sahip olabilir.
+
+## Kurulum
+
+```bash
+# Python 3.10+ gereklidir
+pip install anthropic
+
+# Tam SDK ile ajan özellikleri
+pip install anthropic[agents]
+
+# MCP desteği ile
+pip install anthropic[mcp]
+
+# Ortam değişkeni
+export ANTHROPIC_API_KEY="sk-ant-..."
+```
+
+<Callout type="ipucu">
+Claude Agent SDK, `anthropic` Python paketi içinde gelir. Ayrı bir paket kurmanıza gerek yoktur — `pip install anthropic` yeterlidir.
+</Callout>
+
+## İlk çalıştırma
+
+```python
+import anthropic
+
+client = anthropic.Anthropic()
+
+# Basit araçlı ajan
+tools = [
+    {
+        "name": "dosya_oku",
+        "description": "Belirtilen dosyayı oku ve içeriğini döndür",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "dosya_yolu": {
+                    "type": "string",
+                    "description": "Okunacak dosyanın yolu"
+                }
+            },
+            "required": ["dosya_yolu"]
+        }
+    }
+]
+
+response = client.messages.create(
+    model="claude-sonnet-4-5",
+    max_tokens=1024,
+    tools=tools,
+    messages=[
+        {"role": "user", "content": "README.md dosyasını oku ve özetle."}
+    ]
+)
+print(response.content)
+```
+
+## Senaryolar
+
+### 1) Subagent Mimarisi
+
+```python
+import anthropic
+import asyncio
+
+client = anthropic.Anthropic()
+
+async def arastirmaci_subagent(konu: str) -> str:
+    """Araştırma uzmanı alt ajan."""
+    response = client.messages.create(
+        model="claude-sonnet-4-5",  # Orta maliyet — yeterli kalite
+        max_tokens=2048,
+        system="Sen bir araştırma uzmanısın. Verilen konu hakkında kapsamlı bilgi topla.",
+        messages=[{"role": "user", "content": f"Araştır: {konu}"}]
+    )
+    return response.content[0].text
+
+async def yazar_subagent(arastirma: str) -> str:
+    """İçerik yazarı alt ajan."""
+    response = client.messages.create(
+        model="claude-haiku-3",  # Ucuz model — yazma için yeterli
+        max_tokens=4096,
+        system="Sen bir içerik yazarısın. Araştırma bulgularını makaleye dönüştür.",
+        messages=[{"role": "user", "content": f"Makale yaz:\n{arastirma}"}]
+    )
+    return response.content[0].text
+
+async def orkestrator(gorev: str):
+    """Üst ajan — subagentları yönetir."""
+    # Paralel araştırma
+    arastirma = await arastirmaci_subagent(gorev)
+    # Yazma
+    makale = await yazar_subagent(arastirma)
+    return makale
+
+# Çalıştır
+sonuc = asyncio.run(orkestrator("2026'da LLM güvenliği trendleri"))
+print(sonuc)
+```
+
+### 2) MCP Sunucusuyla Entegrasyon
+
+```python
+import anthropic
+from anthropic.mcp import MCPClient
+
+# GitHub MCP sunucusuna bağlan
+mcp = MCPClient(server_url="http://localhost:3000")
+github_tools = mcp.list_tools()  # Mevcut araçları listele
+
+response = client.messages.create(
+    model="claude-opus-4",
+    max_tokens=4096,
+    tools=github_tools,
+    messages=[{
+        "role": "user",
+        "content": "anthropic/anthropic-sdk-python repo'sundaki açık issue'ları listele "
+                   "ve öncelik sırasına koy."
+    }]
+)
+# Claude, GitHub MCP araçlarını kullanarak issue'ları getirir ve sıralar
+```
+
+### 3) Zamanlanmış Ajan (Scheduled Agent)
+
+```python
+import anthropic
+import schedule
+import time
+
+client = anthropic.Anthropic()
+
+def gunluk_ozet_ajani():
+    """Her sabah çalışan günlük özet ajanı."""
+    response = client.messages.create(
+        model="claude-haiku-3",  # Rutin görev — ucuz model
+        max_tokens=1024,
+        system="Sen bir günlük özet ajanısın. Her sabah önemli gelişmeleri özetle.",
+        messages=[{
+            "role": "user",
+            "content": "Bugünkü AI haberleri özetini hazırla."
+        }]
+    )
+    # Özeti Slack'e veya email'e gönder
+    send_to_slack(response.content[0].text)
+
+# Her sabah 08:00'de çalıştır
+schedule.every().day.at("08:00").do(gunluk_ozet_ajani)
+
+while True:
+    schedule.run_pending()
+    time.sleep(60)
+```
+
+## Diğer araçlarla
+
+**Claude Code ile:** Claude Agent SDK ve Claude Code birbirini tamamlar. SDK üst düzey orkestrasyon ve iş mantığını, Claude Code ise kod tabanı manipülasyonunu yönetir. [Modül 07](/modul/07-claude-code-uretim)'de birlikte kullanım anlatılır.
+
+**MCP protokolüyle:** Claude Agent SDK, MCP'nin ana referans implementasyonunu içerir. 200+ topluluk MCP sunucusuna anahtar teslim bağlantı. Bkz. [MCP protokolü](/kavramlar/mcp-protokol).
+
+**LangGraph ile:** SDK üzerinde tanımlanan Claude ajanlarını LangGraph düğümü olarak kullanabilirsiniz:
+
+```python
+from langgraph.graph import StateGraph
+
+def claude_node(state):
+    response = client.messages.create(
+        model="claude-sonnet-4-5",
+        messages=state["messages"]
+    )
+    return {"messages": [response.content[0].text]}
+
+graph = StateGraph(AgentState)
+graph.add_node("claude", claude_node)
+```
+
+**Agent Teams:** Birden fazla Claude ajanı paralel çalışarak sonuçlarını bir orkestratör ajanda birleştirir. Bkz. [ajan orkestrasyonu](/kavramlar/agent-orchestration).
+
+## Yaygın hatalar ve çözümleri
+
+<details>
+<summary>overloaded_error — Claude aşırı yüklenmiş</summary>
+
+```python
+import time
+from anthropic import APIStatusError
+
+def api_cagri_yap(client, **kwargs):
+    for deneme in range(3):
+        try:
+            return client.messages.create(**kwargs)
+        except APIStatusError as e:
+            if e.status_code == 529:  # Overloaded
+                time.sleep(2 ** deneme)  # 1s, 2s, 4s
+            else:
+                raise
+    raise Exception("API 3 denemede yanıt vermedi.")
+```
+
+</details>
+
+<details>
+<summary>Araç çağrısı döngüsünde sonuç dönmüyor</summary>
+
+Claude araç çağrısı yaptığında yanıt `stop_reason="tool_use"` olur. Tool sonucunu mesaja ekleyip tekrar çağırmanız gerekir:
+
+```python
+# Araç çağrısı döngüsü
+messages = [{"role": "user", "content": kullanici_mesaji}]
+
+while True:
+    response = client.messages.create(model=..., tools=tools, messages=messages)
+
+    if response.stop_reason == "end_turn":
+        break
+
+    if response.stop_reason == "tool_use":
+        # Araç sonucunu ekle
+        tool_result = calistir_arac(response.content)
+        messages.append({"role": "assistant", "content": response.content})
+        messages.append({"role": "user", "content": tool_result})
+```
+
+</details>
+
+<details>
+<summary>1M token bağlam penceresinde maliyet kontrolü</summary>
+
+```python
+# Dosyaları önceden filtrele — gereksiz dosyaları bağlama alma
+import os
+
+def proje_dosyalarini_filtrele(proje_dizini: str, maks_dosya_sayisi: int = 50):
+    dosyalar = []
+    for kok, _, dosya_listesi in os.walk(proje_dizini):
+        for dosya in dosya_listesi:
+            if dosya.endswith(('.py', '.ts', '.md')):  # Yalnızca kaynak dosyalar
+                if 'node_modules' not in kok:
+                    dosyalar.append(os.path.join(kok, dosya))
+    return dosyalar[:maks_dosya_sayisi]
+```
+
+</details>
+
+## Maliyet / limit
+
+<Callout type="uyari">
+Subagent mimarilerinde her alt ajan ayrı bir API çağrısıdır. 5 subagent × 3 araç çağrısı = en az 15 API çağrısı olabilir. Alt ajanlar için model seçimi (Haiku vs Sonnet vs Opus) maliyet üzerinde doğrudan etkilidir.
+</Callout>
+
+- **Model hiyerarşisi (önerilen):**
+  - Planlama / kritik karar → Claude Opus 4
+  - Araştırma / yazma / orta karmaşıklık → Claude Sonnet 4.5
+  - Triyaj / sınıflandırma / basit → Claude Haiku 3
+- **1M token bağlam:** Büyük bağlam çok güçlüdür ancak maliyet de büyüktür. `.claudeignore` eşdeğeri — bağlama yalnızca gerekli dosyaları alın.
+- **Batch API:** Eş zamanlı olmayan (asenkron) büyük hacimli işlemler için Batch API ile %50'ye varan indirim.
+- **Pro/Team Plan:** Sabit ücretli planlar yüksek hacimli kullanımda token başı fiyattan daha uygun olabilir.
+
+## Karşılaştırma
+
+[Framework seçim rehberi](/karsilastirmalar/framework-secim-rehberi)
+
+[Hangi araç ne zaman?](/karsilastirmalar/hangi-arac-ne-zaman)
+
+## Daha fazla
+
+- [Anthropic API dokümantasyonu](https://docs.anthropic.com/claude/reference) — Anthropic
+- [Claude Agent SDK Python](https://github.com/anthropics/anthropic-sdk-python) — GitHub
+- [MCP protokolü](https://modelcontextprotocol.io) — Resmi site
+- [Anthropic Cookbook](https://github.com/anthropics/anthropic-cookbook) — Örnek uygulamalar
+- [MCP protokolü kavramı](/kavramlar/mcp-protokol) — Bu sitede
+- [Subagent pattern'ları](/kavramlar/agent-orchestration) — Bu sitede

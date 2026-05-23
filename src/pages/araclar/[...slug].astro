@@ -1,0 +1,52 @@
+---
+// src/pages/araclar/[...slug].astro
+// Renders KunyeBox and DeprecationBanner from frontmatter.
+
+import DocLayout from '@layouts/DocLayout.astro';
+import Callout from '@components/mdx/Callout.astro';
+import KunyeBox from '@components/KunyeBox.astro';
+import DeprecationBanner from '@components/DeprecationBanner.astro';
+import { getCollection } from 'astro:content';
+
+export async function getStaticPaths() {
+  const entries = await getCollection('araclar', (e) => !e.data.draft);
+  return entries.map((entry) => ({
+    params: { slug: entry.slug },
+    props: { entry },
+  }));
+}
+
+const { entry } = Astro.props;
+const { Content, headings } = await entry.render();
+const fm = entry.data;
+---
+
+<DocLayout
+  title={fm.title}
+  description={fm.summary}
+  headings={headings}
+  frontmatter={fm}
+  breadcrumbs={[
+    { label: 'Araçlar', href: '/araclar' },
+    { label: fm.title },
+  ]}
+  section="Araçlar"
+>
+  <!-- Deprecation/maintenance banner -->
+  {(fm.status === 'deprecated' || fm.status === 'maintenance') && (
+    <DeprecationBanner status={fm.status} toolName={fm.title} />
+  )}
+
+  <!-- Spec box -->
+  <KunyeBox
+    vendor={fm.vendor}
+    toolType={fm.toolType}
+    license={fm.license}
+    os={fm.os}
+    primary_model={fm.primary_model}
+    last_review={fm.last_review}
+    status={fm.status}
+  />
+
+  <Content components={{ Callout }} />
+</DocLayout>

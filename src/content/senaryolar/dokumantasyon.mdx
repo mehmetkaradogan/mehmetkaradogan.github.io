@@ -1,0 +1,280 @@
+---
+title: "Otomatik Dokümantasyon Üretimi ve Güncel Tutma"
+slug: dokumantasyon
+category: senaryolar
+level: orta
+summary: "Kod tabanından otomatik API dokümantasyonu oluşturma, README güncelleme, değişiklik günlüğü (changelog) hazırlama ve dokümantasyonu güncel tutan ajan tabanlı pipeline kurulumu."
+updated: 2026-05-23
+tags: ["dokumantasyon", "claude-code", "tool-use", "ci-cd", "api-docs"]
+related: ["kod-yazma", "arastirma", "icerik-uretimi"]
+---
+
+## Senaryo Tanımı
+
+Dokümantasyon otomasyonu (documentation automation) senaryosu, yazılım ekiplerinin en sık ihmal ettiği alanlardan birini ele alır: dokümantasyonu güncel tutmak. Ajan tabanlı yaklaşım, kodla birlikte evrilen, PR'larla tetiklenen ve eksikleri kendisi tespit eden bir dokümantasyon döngüsü kurar.
+
+Tipik kullanım durumları:
+- Kaynak koddan otomatik API referansı üretme
+- Fonksiyon ve sınıf düzeyinde Docstring/JSDoc otomatik yazma
+- README dosyasını proje değiştikçe güncelleme
+- Commit geçmişinden CHANGELOG otomatik oluşturma
+- Yeni özellik için otomatik kullanıcı kılavuzu taslağı
+- Çok dilli dokümantasyon adaptasyonu
+
+<Callout type="info">
+Bu senaryo orta seviye olarak sınıflandırılmıştır çünkü CI/CD entegrasyonu ve kod analizi araçlarıyla çalışmayı gerektirir. Temel git ve Python bilgisi yeterlidir.
+</Callout>
+
+---
+
+## Hangi Araçlar Uygundur?
+
+| Araç | Kullanım amacı | Bağlantı |
+|---|---|---|
+| Claude Code | Kod tabanını okuyup docstring ve README üreten ajan | [/araclar/claude-code](/araclar/claude-code) |
+| Google Antigravity 2.0 | IDE içinde bağlamsal dokümantasyon önerisi | [/araclar/google-antigravity](/araclar/google-antigravity) |
+| LangGraph | Çok adımlı, checkpoint'li dokümantasyon pipeline'ı | [/araclar/langgraph](/araclar/langgraph) |
+| n8n | GitHub webhook → otomatik dokümantasyon iş akışı | [/araclar/n8n](/araclar/n8n) |
+| Claude Agent SDK | Özel dokümantasyon motoru için programatik kontrol | [/araclar/claude-agent-sdk](/araclar/claude-agent-sdk) |
+
+**Model önerisi:** Kod analizi için Claude Sonnet 4.5 veya Opus 4; kısa açıklamalar için Haiku.
+
+---
+
+## Önerilen Workflow Deseni
+
+Dokümantasyon için **Reflexion (Öz-eleştiri)** deseni en uygundur: ajan ilk taslağı oluşturur, ardından kendi çıktısını değerlendirir ve iyileştirir.
+
+Detaylı desen açıklaması: [/workflow/desenler](/workflow/desenler)
+
+```
+[Kod değişikliği / yeni dosya]
+         ↓
+[Analiz ajanı: nelerin belgeleneceğini belirle]
+  → fonksiyonlar, sınıflar, endpoint'ler
+         ↓
+[Yazar ajanı: ilk taslağı oluştur]
+         ↓
+[Eleştirmen ajanı: taslağı değerlendir]
+  → Eksik parametre var mı?
+  → Örnek kod doğru mu?
+  → Tutarlılık kontrolü
+         ↓  eleştiri varsa geri dön
+[Revize edilmiş dokümantasyon]
+         ↓
+[PR yorumu veya dosyaya yaz]
+```
+
+---
+
+## Adım Adım Örnek
+
+### Hedef
+Bir Python modülündeki tüm fonksiyonlar için Google-style docstring yaz, eksik olanları tespit et.
+
+### Adım 1 — Kurulum
+
+```bash
+pip install anthropic ast-decompiler
+```
+
+### Adım 2 — Docstring Üretici Agent'ı
+
+```python
+import ast
+import os
+from pathlib import Path
+import anthropic
+
+client = anthropic.Anthropic()
+
+def extract_functions(source_code: str) -> list[dict]:
+    """Python kaynak kodundan fonksiyon bilgilerini çıkar."""
+    tree = ast.parse(source_code)
+    functions = []
+    
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            func_info = {
+                "name": node.name,
+                "args": [arg.arg for arg in node.args.args],
+                "has_docstring": (
+                    isinstance(node.body[0], ast.Expr) and
+                    isinstance(node.body[0].value, ast.Constant)
+                ),
+                "lineno": node.lineno,
+                "source": ast.get_source_segment(source_code, node) or ""
+            }
+            functions.append(func_info)
+    
+    return functions
+
+def generate_docstring(func_info: dict) -> str:
+    """Fonksiyon için Google-style docstring üret."""
+    prompt = f"""Aşağıdaki Python fonksiyonu için Google-style docstring yaz.
+Türkçe yaz. Parametreler, dönüş değeri ve kısa açıklama içersin.
+Sadece docstring metnini döndür (tırnak işaretleri olmadan).
+
+Fonksiyon:
+```python
+{func_info['source'][:500]}
+```"""
+
+    response = client.messages.create(
+        model="claude-haiku-3-5",
+        max_tokens=500,
+        messages=[{"role": "user", "content": prompt}]
+    )
+    return response.content[0].text
+
+def add_docstrings_to_file(file_path: str, dry_run: bool = True):
+    """Bir Python dosyasına eksik docstring'leri ekle."""
+    source = Path(file_path).read_text(encoding="utf-8")
+    functions = extract_functions(source)
+    
+    undocumented = [f for f in functions if not f["has_docstring"]]
+    print(f"{file_path}: {len(undocumented)} belgesiz fonksiyon bulundu.")
+    
+    if dry_run:
+        for func in undocumented:
+            print(f"\n--- {func['name']} ---")
+            docstring = generate_docstring(func)
+            print(f'    """{docstring}"""')
+    else:
+        # Gerçek yazma için daha gelişmiş AST dönüşümü gerekir
+        # libcst veya rope kütüphanelerini kullanın
+        print("Dry-run modunda çalışıyor. Gerçek yazma için libcst kullanın.")
+
+# Kullanım
+add_docstrings_to_file("my_module.py", dry_run=True)
+```
+
+<Callout type="ipucu">
+Gerçek dosya düzenleme için `ast` modülü yerine `libcst` (Concrete Syntax Tree) kütüphanesini kullanın. `libcst` orijinal formatlama ve yorumları korur.
+</Callout>
+
+### Adım 3 — Claude Code ile Tam Otomasyon
+
+Claude Code ile mevcut kod tabanının tamamını analiz edip dokümante edebilirsiniz:
+
+```bash
+# Claude Code'u başlat
+claude
+
+# İçeride:
+# > src/ altındaki tüm Python dosyalarını tara.
+#   Docstring'i eksik olan her fonksiyon için Google-style Türkçe docstring ekle.
+#   Değişiklikleri ayrı bir dal (branch) oluşturarak uygula: git checkout -b docs/auto-docstrings
+#   Sonra summary bir CHANGES.md dosyasına yaz.
+```
+
+### Adım 4 — CHANGELOG Otomasyonu (CI/CD)
+
+```python
+import subprocess
+import anthropic
+
+def get_commit_log(since_tag: str = "HEAD~20") -> str:
+    """Son commit'leri al."""
+    result = subprocess.run(
+        ["git", "log", f"{since_tag}..HEAD", "--oneline", "--no-merges"],
+        capture_output=True, text=True
+    )
+    return result.stdout
+
+def generate_changelog(commit_log: str, version: str) -> str:
+    """Commit geçmişinden CHANGELOG girdisi üret."""
+    client = anthropic.Anthropic()
+    
+    prompt = f"""Aşağıdaki git commit geçmişinden {version} sürümü için Türkçe CHANGELOG girdisi oluştur.
+Keep-a-Changelog formatını kullan: Added / Changed / Deprecated / Removed / Fixed / Security.
+Commit mesajlarını anlamlı kullanıcı odaklı maddelere dönüştür.
+
+Commit geçmişi:
+{commit_log}"""
+
+    response = client.messages.create(
+        model="claude-sonnet-4-5",
+        max_tokens=1000,
+        messages=[{"role": "user", "content": prompt}]
+    )
+    return response.content[0].text
+
+# Kullanım
+commits = get_commit_log()
+changelog_entry = generate_changelog(commits, "v2.1.0")
+print(changelog_entry)
+```
+
+### Adım 5 — GitHub Actions Entegrasyonu
+
+```yaml
+# .github/workflows/auto-docs.yml
+name: Otomatik Dokümantasyon
+
+on:
+  push:
+    branches: [main]
+    paths: ["src/**/*.py"]
+
+jobs:
+  generate-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Python kur
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+      
+      - name: Bağımlılıkları yükle
+        run: pip install anthropic libcst
+      
+      - name: Docstring'leri kontrol et
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python scripts/check_docstrings.py --report
+      
+      - name: PR yorumu oluştur
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs')
+            const report = fs.readFileSync('docstring_report.md', 'utf8')
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: report
+            })
+```
+
+---
+
+## No-Code Alternatif (n8n)
+
+<details>
+<summary>n8n otomatik dokümantasyon pipeline'ı</summary>
+
+1. **GitHub Trigger:** Yeni push veya PR açılınca tetikle.
+2. **GitHub API node:** Değişen dosyaların içeriğini al.
+3. **Filter node:** Sadece `.py` / `.ts` dosyalarını geçir.
+4. **AI Agent node:** Her dosya için dokümantasyon taslağı oluştur.
+5. **GitHub API node:** PR'a yorum olarak gönder.
+6. **Opsiyonel:** Notion veya Confluence'a kaydet.
+
+</details>
+
+---
+
+## İlgili Projeler
+
+- [/projeler/baslangic](/projeler/baslangic) — GitHub issue triage botu
+- [/projeler/ileri](/projeler/ileri) — Claude Code subagent ekibi + CI/CD entegrasyonu
+- [/projeler/orta](/projeler/orta) — Multi-agent içerik üretim hattı
+
+<Callout type="uyari">
+Otomatik üretilen dokümantasyonu her zaman bir geliştirici gözden geçirmelidir. Ajan, API'nin davranışını kod yapısından çıkarabilir ancak iş mantığını (business logic) her zaman doğru yorumlayamayabilir.
+</Callout>

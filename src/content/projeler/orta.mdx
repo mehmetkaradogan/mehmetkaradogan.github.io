@@ -1,0 +1,238 @@
+---
+title: "Orta Seviye Projeler"
+slug: orta
+category: projeler
+seviye: orta
+level: orta
+summary: "Çok ajanlı içerik üretim hattı, kişisel asistan, müşteri destek triajı ve veri kazıma pipeline'ı — orta seviye dört agentic AI projesi."
+updated: 2026-05-23
+tags: [proje, orta, multi-agent, crewai, langgraph, otomasyon]
+related: [04-langgraph-baslangic, 05-crewai-multi-agent, 06-mcp-sunucu-yazma]
+---
+
+## Orta Seviye Projeler
+
+Bu sayfadaki projeler Modül 04-06'yı tamamlamış kişiler için tasarlanmıştır. Her proje birden fazla agent veya harici servis entegrasyonu içerir. Tahmini süre: 8-24 saat.
+
+---
+
+## Proje 1 — Multi-Agent İçerik Üretim Hattı
+
+**Amaç:** Araştırmacı, yazar ve editör agent'larından oluşan bir ekiple otomatik blog yazısı veya sosyal medya içeriği üreten pipeline.
+
+**Kullanılan Araçlar:**
+- [CrewAI](/araclar/crewai) — agent ekibi yönetimi
+- [Anthropic SDK](/araclar/claude-code) — LLM çağrıları
+- `tavily-python` — web araması (araştırmacı için)
+- `python-docx` veya `markdown` — çıktı formatı
+
+**Adımlar:**
+
+1. CrewAI ile üç agent kur: Araştırmacı, Yazar, Editör.
+2. Araştırmacıya Tavily ile web araması aracı ver.
+3. Görev zinciri: araştır → yaz → düzenle → kaydet.
+4. CLI'dan konu girişi al, çıktıyı Markdown ve DOCX olarak dışa aktar.
+5. Token maliyetini raporla.
+
+**Zorluk:** Orta
+
+**Mimari:**
+
+```
+[Kullanıcı] → konu
+    │
+    ▼
+[Araştırmacı Agent]  ── Tavily araması ──→ 5 kaynak bul
+    │
+    ▼
+[Yazar Agent]  ──── araştırma çıktısı ──→ 700 kelime blog yaz
+    │
+    ▼
+[Editör Agent]  ─── yazı ──→ düzelt + SEO puanı
+    │
+    ▼
+[Çıktı] yazı.md + maliyet_raporu.txt
+```
+
+**Genişletme Fikirleri:**
+- Görseller için DALL-E veya Imagen entegrasyonu
+- WordPress/Ghost API ile doğrudan yayınlama
+- A/B başlık testi için iki farklı Yazar agent'ı çalıştır
+
+**Başlangıç Kodu:**
+
+Modül 05'teki CrewAI ekip kurulumunu temel alarak Tavily aramasını ekle:
+
+```python
+from crewai_tools import TavilySearchResults
+
+tavily_araci = TavilySearchResults(
+    api_key=os.environ["TAVILY_API_KEY"],
+    max_results=5
+)
+
+arastirmaci = Agent(
+    role="Kıdemli Araştırmacı",
+    goal="Verilen konu hakkında güncel, doğrulanmış bilgi topla.",
+    tools=[tavily_araci],
+    llm=llm
+)
+```
+
+---
+
+## Proje 2 — Calendar + Email + Notion Kişisel Asistan
+
+**Amaç:** Google Calendar'dan günlük planı okuyup e-postaları özetleyen ve görevleri Notion'a yazan entegre kişisel asistan.
+
+**Kullanılan Araçlar:**
+- Google Calendar API
+- Gmail API
+- Notion API
+- [Anthropic SDK](/araclar/claude-code)
+- [LangGraph](/araclar/langgraph) — durum yönetimi
+
+**Adımlar:**
+
+1. Google Calendar API ile bugünün etkinliklerini çek.
+2. Gmail API ile okunmamış e-postaları çek (son 24 saat).
+3. Claude'a: "Bu e-postaları önem sırasına göre özetle ve eylem gerekenler listesini çıkar" yap.
+4. Eylem gereken maddeleri Notion'da yeni görevler olarak kaydet.
+5. Sabah rutini özet raporu üret ve e-postayla gönder.
+
+**Zorluk:** Orta-Yüksek
+
+**LangGraph Durum Tasarımı:**
+
+```python
+from typing import TypedDict, Annotated
+from langgraph.graph.message import add_messages
+
+class AsistanDurumu(TypedDict):
+    mesajlar: Annotated[list, add_messages]
+    etkinlikler: list[dict]
+    emailler: list[dict]
+    gorevler: list[str]
+    rapor: str
+```
+
+**Genişletme Fikirleri:**
+- Slack bildirimleri ekle
+- Haftalık planlama desteği
+- Toplantı hazırlık özetleri
+
+<Callout type="uyari">
+Google ve Notion API'leri için OAuth 2.0 yapılandırması gerekir. Başlamadan önce Google Cloud Console'da proje aç ve API'leri etkinleştir.
+</Callout>
+
+---
+
+## Proje 3 — Müşteri Destek Triajı + Slack Handoff
+
+**Amaç:** Gelen destek taleplerini kategorilere ayıran, basit soruları otomatik yanıtlayan, karmaşık sorunları Slack kanalına ileten agent.
+
+**Kullanılan Araçlar:**
+- [CrewAI](/araclar/crewai) veya [LangGraph](/araclar/langgraph)
+- Slack SDK (`slack-sdk`)
+- [Anthropic SDK](/araclar/claude-code)
+- SQLite — talep geçmişi
+
+**Adımlar:**
+
+1. Webhook ile gelen destek taleplerini al (FastAPI endpoint'i).
+2. Triage agent'ı: kategori (teknik/faturalandırma/genel) + aciliyet (yüksek/orta/düşük) belirle.
+3. Genel ve düşük aciliyetli sorular için otomatik yanıt üret.
+4. Yüksek aciliyetli veya teknik sorunları Slack'te `#destek-triage` kanalına ilet.
+5. SQLite'a talep + yanıt + kategori + aciliyet kaydet.
+
+**Zorluk:** Orta
+
+**API Mimarisi:**
+
+```python
+from fastapi import FastAPI
+from pydantic import BaseModel
+
+uygulama = FastAPI()
+
+class DestekTalebi(BaseModel):
+    kullanici_id: str
+    mesaj: str
+    kanal: str  # "email" | "web" | "slack"
+
+@uygulama.post("/destek")
+async def destek_al(talep: DestekTalebi):
+    sonuc = destek_agent.isle(talep.mesaj)
+    if sonuc["slack_gerekli"]:
+        slack_istemci.chat_postMessage(
+            channel="#destek-triage",
+            text=f"*Yeni talep [{sonuc['aciliyet'].upper()}]*\n"
+                 f"Kullanıcı: {talep.kullanici_id}\n"
+                 f"Mesaj: {talep.mesaj}\n"
+                 f"Kategori: {sonuc['kategori']}"
+        )
+    return {"yanit": sonuc["yanit"], "kategori": sonuc["kategori"]}
+```
+
+**Genişletme Fikirleri:**
+- Çözülmüş ticket'lardan öğrenen bilgi tabanı (agentic RAG)
+- Müşteri memnuniyet anketi gönderimi
+- İstatistik dashboard'u
+
+---
+
+## Proje 4 — Veri Kazıma + Sınıflandırma + Airtable Pipeline
+
+**Amaç:** Belirtilen web sitelerinden iş ilanlarını, ürün fiyatlarını veya haberleri toplayıp sınıflandıran ve Airtable'a yazan otomatik pipeline.
+
+**Kullanılan Araçlar:**
+- `playwright` veya `httpx` + `beautifulsoup4` — web kazıma (web scraping)
+- [Anthropic SDK](/araclar/claude-code) — sınıflandırma
+- Airtable API (`pyairtable`)
+- [LangGraph](/araclar/langgraph) — pipeline akış yönetimi
+
+**Adımlar:**
+
+1. Playwright ile hedef sayfayı render et ve içeriği al.
+2. BeautifulSoup ile ilgili HTML öğelerini ayıkla.
+3. Claude'a: "Bu iş ilanını kategorize et ve yapılandırılmış JSON üret" yap.
+4. Çıktıyı Pydantic modeliyle doğrula.
+5. Airtable'a her satırı yaz.
+6. Hata durumunda yeniden dene; eklenenlerini kaydet (idempotent).
+
+**Zorluk:** Orta-Yüksek
+
+**Pydantic Çıktı Modeli:**
+
+```python
+from pydantic import BaseModel
+
+class IsIlani(BaseModel):
+    baslik: str
+    sirket: str
+    konum: str
+    uzaktan: bool
+    maas_aralik: str | None
+    kategori: str   # "yazilim" | "tasarim" | "pazarlama" | ...
+    dil: str        # "python" | "javascript" | ... (yazılım için)
+    deneyim_yil: int | None
+    kaynak_url: str
+
+# Claude'dan yapılandırılmış çıktı al
+yanit = client.messages.create(
+    model="claude-haiku-4-5",
+    max_tokens=512,
+    system="Yanıtı yalnızca geçerli JSON olarak ver. Başka metin ekleme.",
+    messages=[{"role": "user", "content": f"Bu iş ilanını analiz et:\n{ham_metin}"}]
+)
+ilan = IsIlani.model_validate_json(yanit.content[0].text)
+```
+
+**Genişletme Fikirleri:**
+- E-posta bildirimi: yeni kriterlere uyan ilan eklenince bildir
+- Çoklu site desteği (pararlel crawling)
+- Veri kalitesi kontrol agent'ı
+
+---
+
+**Daha fazla zorluk mu istiyorsun?** [İleri Seviye Projelere](/projeler/ileri) geç.

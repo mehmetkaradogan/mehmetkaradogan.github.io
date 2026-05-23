@@ -1,0 +1,333 @@
+---
+title: "LangGraph ile İlk Agent"
+slug: 04-langgraph-baslangic
+category: modul
+level: orta
+summary: "LangGraph ile durumlu (stateful) graph kurma, koşullu kenar (conditional edge) yazma, checkpoint ile kesintiye dayanıklı agent yapısı oluşturma."
+updated: 2026-05-23
+tags: [langgraph, stateful-agent, graph, checkpoint, orta]
+related: [03-rag-kurulumu, 05-crewai-multi-agent, 02-ilk-tool-calling]
+modul: "04"
+sure: "90 dakika"
+onkosul: ["01-temeller", "02-ilk-tool-calling"]
+ciktilar:
+  - "Stateful graph kurabilme"
+  - "Conditional edge yazabilme"
+  - "Checkpoint kullanabilme"
+---
+
+## Hedef
+
+Bu modülün sonunda LangGraph ile durumlu bir agent graph'ı kurabilecek, koşullu dallanma (conditional edge) ile karar veren bir akış tasarlayabilecek ve checkpoint ile agent'ı kaldığı yerden devam ettirebileceksin.
+
+## Önkoşullar
+
+- [Modül 01](/modul/01-temeller) ve [Modül 02](/modul/02-ilk-tool-calling) tamamlandı
+- Python 3.11+, `anthropic` ve `python-dotenv` kurulu
+
+## Öğrenme çıktıları
+
+1. `StateGraph` sınıfını kullanarak düğüm (node) ve kenar (edge) tanımlayabilirsin.
+2. `TypedDict` ile tip güvenli durum (state) tanımlayabilirsin.
+3. Koşullu kenar fonksiyonu yazarak akışı dinamik olarak yönlendirebilirsin.
+4. `MemorySaver` ile checkpoint kurarak kesintiye dayanıklı agent yaparsın.
+
+---
+
+## Adım 1 — LangGraph nedir?
+
+LangGraph, LLM agent'larını **yönlü döngülü grafik** (directed cyclic graph) olarak modellemenizi sağlayan bir kütüphanedir. 2026 itibarıyla üretim ortamlarında fiili kazanan konumundadır (BlackRock, JPMorgan gibi kurumsal kullanıcılar dahil).
+
+Temel felsefesi: agent'ın her adımı bir **düğüm** (node), adımlar arası geçiş bir **kenar** (edge), tüm konuşma/işlem durumu ise bir **state** nesnesidir.
+
+```
+[kullanici_girisi] → [llm_cagrisi] → araç gerekli mi?
+                                        ├── Evet → [araci_calistir] → [llm_cagrisi]
+                                        └── Hayır → [bitis]
+```
+
+---
+
+## Adım 2 — Kurulum
+
+```bash
+pip install langgraph langchain-anthropic python-dotenv
+```
+
+---
+
+## Adım 3 — Durum (State) tanımlama
+
+```python
+# state.py
+from typing import TypedDict, Annotated
+from langgraph.graph.message import add_messages
+
+class AgentDurumu(TypedDict):
+    """
+    Graph boyunca taşınan durum.
+    mesajlar: add_messages reducer otomatik birleştirme yapar.
+    arac_cagrisi: son araç çağrısının var olup olmadığı.
+    """
+    mesajlar: Annotated[list, add_messages]
+    arac_cagrisi: bool
+```
+
+<Callout type="info">
+`Annotated[list, add_messages]` LangGraph'a "bu listeyi her adımda sıfırdan yazmak yerine üstüne ekle" talimatı verir. Bu sayede mesaj geçmişi otomatik birikir.
+</Callout>
+
+---
+
+## Adım 4 — Düğümleri (Nodes) yaz
+
+```python
+# dugumler.py
+import os
+from dotenv import load_dotenv
+from langchain_anthropic import ChatAnthropic
+from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
+from langchain_core.tools import tool
+from state import AgentDurumu
+
+load_dotenv()
+
+model = ChatAnthropic(
+    model="claude-sonnet-4-5",
+    anthropic_api_key=os.environ["ANTHROPIC_API_KEY"]
+)
+
+# Araç tanımı — LangChain @tool dekoratörü ile
+@tool
+def web_ara(sorgu: str) -> str:
+    """İnternet araması simüle eder (gerçek implementasyon için Tavily veya SerpAPI kullan)."""
+    return f"'{sorgu}' için simüle arama sonucu: Bu konu hakkında birçok kaynak bulunmaktadır."
+
+ARACLAR = [web_ara]
+model_aracli = model.bind_tools(ARACLAR)
+
+def llm_dugumu(durum: AgentDurumu) -> dict:
+    """LLM çağrısı yapan düğüm."""
+    yanit = model_aracli.invoke(durum["mesajlar"])
+    arac_cagrisi = bool(getattr(yanit, "tool_calls", []))
+    return {
+        "mesajlar": [yanit],
+        "arac_cagrisi": arac_cagrisi
+    }
+
+def araci_calistir(durum: AgentDurumu) -> dict:
+    """Araç çağrılarını işleyen düğüm."""
+    son_mesaj = durum["mesajlar"][-1]
+    sonuclar = []
+    for tc in son_mesaj.tool_calls:
+        if tc["name"] == "web_ara":
+            sonuc = web_ara.invoke(tc["args"])
+            sonuclar.append(
+                ToolMessage(content=str(sonuc), tool_call_id=tc["id"])
+            )
+    return {"mesajlar": sonuclar, "arac_cagrisi": False}
+```
+
+---
+
+## Adım 5 — Koşullu kenar (Conditional Edge)
+
+```python
+# kenarlar.py
+from state import AgentDurumu
+
+def sonraki_adim(durum: AgentDurumu) -> str:
+    """
+    Durum bazlı yönlendirme.
+    Araç çağrısı varsa → 'araci_calistir' düğümüne
+    Yoksa → '__end__' (bitis)
+    """
+    if durum.get("arac_cagrisi"):
+        return "araci_calistir"
+    return "__end__"
+```
+
+---
+
+## Adım 6 — Graph'ı birleştir ve derle
+
+```python
+# graph.py
+from langgraph.graph import StateGraph, START, END
+from langgraph.checkpoint.memory import MemorySaver
+from state import AgentDurumu
+from dugumler import llm_dugumu, araci_calistir
+from kenarlar import sonraki_adim
+
+def graph_olustur():
+    oluşturucu = StateGraph(AgentDurumu)
+
+    # Düğümleri ekle
+    oluşturucu.add_node("llm", llm_dugumu)
+    oluşturucu.add_node("araci_calistir", araci_calistir)
+
+    # Kenarları ekle
+    oluşturucu.add_edge(START, "llm")
+    oluşturucu.add_conditional_edges(
+        "llm",
+        sonraki_adim,
+        {
+            "araci_calistir": "araci_calistir",
+            "__end__": END
+        }
+    )
+    oluşturucu.add_edge("araci_calistir", "llm")  # Araçtan sonra LLM'e geri dön
+
+    # Checkpoint ile derle
+    checkpoint = MemorySaver()
+    return oluşturucu.compile(checkpointer=checkpoint)
+
+graph = graph_olustur()
+```
+
+---
+
+## Adım 7 — Agent'ı çalıştır
+
+```python
+# calistir.py
+from langchain_core.messages import HumanMessage
+from graph import graph
+
+# thread_id ile oturumları ayır — aynı ID'de konuşma devam eder
+konfigurasyon = {"configurable": {"thread_id": "oturum-001"}}
+
+def konuş(soru: str):
+    girdi = {"mesajlar": [HumanMessage(content=soru)], "arac_cagrisi": False}
+    for olay in graph.stream(girdi, konfigurasyon, stream_mode="values"):
+        son_mesaj = olay["mesajlar"][-1]
+        if hasattr(son_mesaj, "content") and son_mesaj.content:
+            print(f"[{son_mesaj.__class__.__name__}]: {son_mesaj.content}")
+    print("---")
+
+# Çok turlu sohbet
+konuş("LangGraph hakkında bilgi ver.")
+konuş("Peki checkpointing ne işe yarar?")  # Önceki bağlamı hatırlar!
+```
+
+<Callout type="ipucu">
+`thread_id` aynı kaldığı sürece LangGraph önceki mesajları `MemorySaver`'dan okur. Farklı kullanıcılar için farklı `thread_id` kullan.
+</Callout>
+
+---
+
+## Adım 8 — Checkpoint ile kesintiye dayanıklılık
+
+```python
+# checkpoint_test.py
+from langchain_core.messages import HumanMessage
+from graph import graph
+
+konfig = {"configurable": {"thread_id": "uzun-gorev-001"}}
+
+# İlk tur
+graph.invoke(
+    {"mesajlar": [HumanMessage("Merhaba, adın ne?")], "arac_cagrisi": False},
+    konfig
+)
+
+# Mevcut durumu görüntüle
+snapshot = graph.get_state(konfig)
+print("Mesaj sayısı:", len(snapshot.values["mesajlar"]))
+print("Sonraki adım:", snapshot.next)
+```
+
+---
+
+## Egzersiz
+
+GitHub issue'larını okuyup öncelik etiketi öneren bir agent yaz:
+
+1. `issue_oku(issue_no: int) -> str` — bir issue'nun başlık ve açıklamasını döner (sahte veriyle simüle et).
+2. `etiket_oner(issue_no: int, etiket: str) -> str` — önerilen etiketi kaydeder.
+3. Graph'a bu iki aracı ekle.
+4. "Issue #42'nin önceliğini belirle" sorusunu test et.
+
+<details>
+<summary>Çözüm (tıkla)</summary>
+
+```python
+import os
+from dotenv import load_dotenv
+from typing import TypedDict, Annotated
+from langchain_anthropic import ChatAnthropic
+from langchain_core.messages import HumanMessage, ToolMessage
+from langchain_core.tools import tool
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import add_messages
+from langgraph.checkpoint.memory import MemorySaver
+
+load_dotenv()
+
+class Durum(TypedDict):
+    mesajlar: Annotated[list, add_messages]
+    arac_cagrisi: bool
+
+SAHTE_ISSUELER = {
+    42: {"baslik": "Üretim ortamında API zaman aşımı", "aciklama": "Her 5 saatte bir timeout hatası alıyoruz."},
+    7: {"baslik": "Dokümantasyon güncellemesi", "aciklama": "README güncellenmeli."},
+}
+
+@tool
+def issue_oku(issue_no: int) -> str:
+    """GitHub issue bilgilerini getirir."""
+    issue = SAHTE_ISSUELER.get(issue_no)
+    if not issue:
+        return f"Issue #{issue_no} bulunamadı."
+    return f"Başlık: {issue['baslik']}\nAçıklama: {issue['aciklama']}"
+
+@tool
+def etiket_oner(issue_no: int, etiket: str) -> str:
+    """Issue'ya etiket önerir."""
+    return f"Issue #{issue_no} için '{etiket}' etiketi önerildi."
+
+model = ChatAnthropic(model="claude-sonnet-4-5", anthropic_api_key=os.environ["ANTHROPIC_API_KEY"])
+araclar = [issue_oku, etiket_oner]
+model_aracli = model.bind_tools(araclar)
+
+ARACI_FN = {"issue_oku": issue_oku, "etiket_oner": etiket_oner}
+
+def llm_dugumu(d):
+    yanit = model_aracli.invoke(d["mesajlar"])
+    return {"mesajlar": [yanit], "arac_cagrisi": bool(getattr(yanit, "tool_calls", []))}
+
+def araclari_calistir(d):
+    son = d["mesajlar"][-1]
+    sonuclar = []
+    for tc in son.tool_calls:
+        fn = ARACI_FN.get(tc["name"])
+        r = fn.invoke(tc["args"]) if fn else "Bilinmeyen araç"
+        sonuclar.append(ToolMessage(content=str(r), tool_call_id=tc["id"]))
+    return {"mesajlar": sonuclar, "arac_cagrisi": False}
+
+def yonlendir(d):
+    return "araclari_calistir" if d.get("arac_cagrisi") else "__end__"
+
+g = StateGraph(Durum)
+g.add_node("llm", llm_dugumu)
+g.add_node("araclari_calistir", araclari_calistir)
+g.add_edge(START, "llm")
+g.add_conditional_edges("llm", yonlendir, {"araclari_calistir": "araclari_calistir", "__end__": END})
+g.add_edge("araclari_calistir", "llm")
+agent = g.compile(checkpointer=MemorySaver())
+
+konfig = {"configurable": {"thread_id": "issue-agent"}}
+sonuc = agent.invoke(
+    {"mesajlar": [HumanMessage("Issue #42'nin önceliğini belirle ve uygun etiket öner.")], "arac_cagrisi": False},
+    konfig
+)
+print(sonuc["mesajlar"][-1].content)
+```
+
+</details>
+
+---
+
+## Sonraki: [Modül 05 — CrewAI Multi-Agent](/modul/05-crewai-multi-agent)
+
+Bir sonraki modülde CrewAI ile birden fazla uzman agent'tan oluşan bir ekip kurarak görev dağılımı ve çıktı paylaşımını öğreneceksin.

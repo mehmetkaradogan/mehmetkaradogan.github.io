@@ -1,0 +1,85 @@
+---
+// src/pages/hakkinda.astro
+
+import BaseLayout from '@layouts/BaseLayout.astro';
+import Breadcrumb from '@components/Breadcrumb.astro';
+---
+
+<BaseLayout
+  title="Hakkında"
+  description="Agentic AI Öğrenme Merkezi hakkında: site amacı, hedef kitle, lisans ve katkı rehberi."
+>
+  <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <Breadcrumb crumbs={[{ label: 'Hakkında' }]} />
+
+    <article class="prose prose-neutral dark:prose-invert max-w-2xl
+                    prose-headings:scroll-mt-24
+                    prose-a:text-indigo-600 dark:prose-a:text-indigo-400">
+
+      <h1>Hakkında</h1>
+
+      <h2>Site Amacı</h2>
+      <p>
+        <strong>Agentic AI Öğrenme Merkezi</strong>, Türkçe konuşan geliştiriciler, meraklılar ve
+        profesyoneller için oluşturulmuş kapsamlı bir kaynak sitesidir.
+        Amacımız: Agentic AI kavramlarını, araçlarını ve pratik uygulamalarını
+        anlaşılır Türkçe içeriklerle sunmak.
+      </p>
+
+      <h2>Hedef Kitle</h2>
+      <ul>
+        <li>Python bilen ancak AI sistemlerine yeni başlayanlar</li>
+        <li>LLM kullanıyor ama agent mimarisi kurmak isteyenler</li>
+        <li>Mevcut projelerine agentic özellikler eklemek isteyen geliştiriciler</li>
+        <li>Türkçe kaynak arayan araştırmacı ve öğrenciler</li>
+      </ul>
+
+      <h2>Varsayımlar</h2>
+      <ul>
+        <li>
+          <strong>Google Antigravity</strong> = Google'ın Kasım 2025'te çıkardığı,
+          Gemini 3 Pro ile çalışan agentic IDE (VS Code fork + Agent Manager + CLI + SDK).
+          Antigravity 2.0 ile Mayıs 2026'da bağımsız uygulamaya genişledi.
+        </li>
+        <li>
+          <strong>AutoGen</strong> Microsoft tarafından bakım moduna alınmıştır;
+          yeni projeler için LangGraph veya CrewAI öneriyoruz.
+        </li>
+        <li>
+          <strong>MCP (Model Context Protocol)</strong>, Anthropic kaynaklı ancak
+          OpenAI, Google ve 200+ topluluk sunucusu tarafından desteklenen fiili standarttır.
+        </li>
+        <li>
+          İçerikteki teknik bilgiler Mayıs 2026 itibarıyla günceldir.
+          Araç durum güncellemeleri için <a href="/haberler">Haberler</a> bölümünü takip edin.
+        </li>
+      </ul>
+
+      <h2>Lisans</h2>
+      <p>
+        <strong>İçerik:</strong> <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener noreferrer">CC BY-SA 4.0</a>
+        — Atıf yaparak ve aynı lisans ile paylaşabilirsiniz.
+      </p>
+      <p>
+        <strong>Kaynak kodu:</strong> <a href="https://opensource.org/licenses/MIT" target="_blank" rel="noopener noreferrer">MIT</a>
+        — <a href="https://github.com/agenticai-tr/site" target="_blank" rel="noopener noreferrer">GitHub</a>'da açık kaynak.
+      </p>
+
+      <h2>Katkı</h2>
+      <p>
+        İçerik hatası, güncel olmayan bilgi veya yeni ekleme önerisi mi var?
+        GitHub'daki <a href="https://github.com/agenticai-tr/site/issues" target="_blank" rel="noopener noreferrer">Issues</a> bölümüne açın
+        veya doğrudan Pull Request gönderin.
+      </p>
+      <p>
+        Katkı rehberi için deponun <code>CONTRIBUTING.md</code> dosyasını inceleyin.
+      </p>
+
+      <h2>İletişim</h2>
+      <p>
+        Sorularınız için <a href="https://github.com/agenticai-tr/site/discussions" target="_blank" rel="noopener noreferrer">GitHub Discussions</a>
+        kullanabilirsiniz.
+      </p>
+    </article>
+  </div>
+</BaseLayout>

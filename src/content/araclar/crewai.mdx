@@ -1,0 +1,289 @@
+---
+title: "CrewAI"
+slug: crewai
+category: araclar
+level: orta
+summary: "Rol tabanlı çoklu ajan çerçevesi; 'mürettebat (crew)' soyutlamasıyla günler içinde çalışan prototip oluşturmayı mümkün kılan, hızlı prototiplemenin fiili standardı."
+updated: 2026-05-23
+tags: ["framework", "multi-agent", "rol-bazlı", "prototipleme"]
+related: ["langgraph", "autogen", "openai-agents-sdk"]
+vendor: "CrewAI, Inc."
+toolType: "framework"
+license: "MIT (açık kaynak)"
+os: ["macOS", "Linux", "Windows"]
+primary_model: "Model bağımsız (Claude, GPT, Gemini, Llama)"
+last_review: 2026-05-23
+status: "active"
+---
+
+## Nedir?
+
+CrewAI, rol tabanlı çoklu ajan iş akışlarını (role-based multi-agent workflow) kolayca tanımlamayı sağlayan bir Python çerçevesidir. Her ajan bir "rol" ve "hedef" tanımıyla oluşturulur; birden fazla ajan bir "mürettebat (crew)" oluşturur ve görevleri sıralı veya paralel olarak tamamlar. LangGraph'a göre çok daha düşük giriş eşiği sunan CrewAI, 2026 itibarıyla hızlı prototiplemenin fiili standardı haline gelmiştir. Üretim kullanımı için ek konfigürasyon gerekse de bir günde çalışan çoklu ajan prototipi oluşturmak CrewAI ile mümkündür.
+
+## Ne için iyi
+
+- **Hızlı prototipleme:** Birkaç satır kodla çoklu ajan sistemi kurmak — bir günde çalışan prototip.
+- **Rol-görev soyutlaması:** "Araştırmacı", "Yazar", "Editör" gibi insan dostu rol tanımları.
+- **Sıralı ve paralel görevler:** Crew'daki ajanlar birbirini takip eden veya paralel çalışan görevler yürütebilir.
+- **Dahili bellek (memory):** CrewAI, ajan geçmişini otomatik yönetir.
+- **Araç (tool) entegrasyonu:** LangChain araçları, SerperAPI, web tarayıcı araçları ile kolay entegrasyon.
+- **CrewAI Cloud:** Barındırılan (hosted) versiyon ile altyapı yönetimi olmadan deploy etme.
+
+## Ne için kötü
+
+- **Üretim karmaşıklığı:** Kesintiye dayanıklı (durable) görevler, ince kontrol akışı veya denetim izi için LangGraph daha uygundur.
+- **Durum kalıcılığı:** Checkpoint mekanizması LangGraph kadar gelişmiş değil.
+- **Gözlemlenebilirlik:** LangSmith gibi derin izleme altyapısı yoktur (üçüncü taraf entegrasyonu gerekir).
+- **Düzenleyici uyum:** Finans/sağlık gibi denetim gerektiren sektörler için LangGraph daha sağlam.
+- **Karmaşık kontrol akışı:** İç içe koşullar ve döngüler LangGraph'ta daha temiz ifade edilir.
+
+## Kurulum
+
+```bash
+# Python 3.10+ gereklidir
+pip install crewai
+
+# Araç eklentileri ile birlikte
+pip install crewai[tools]
+
+# Ortam değişkenleri
+export ANTHROPIC_API_KEY="sk-ant-..."
+# veya
+export OPENAI_API_KEY="sk-proj-..."
+```
+
+<Callout type="ipucu">
+CrewAI CLI ile proje iskeletini otomatik oluşturabilirsiniz:
+
+```bash
+pip install crewai
+crewai create crew benim-proje
+cd benim-proje
+```
+
+</Callout>
+
+## İlk çalıştırma
+
+```python
+from crewai import Agent, Task, Crew
+from langchain_anthropic import ChatAnthropic
+
+# Model
+llm = ChatAnthropic(model="claude-sonnet-4-5")
+
+# Ajanları tanımla
+researcher = Agent(
+    role="Kıdemli Araştırmacı",
+    goal="Verilen konu hakkında kapsamlı ve doğru bilgi topla",
+    backstory="10 yıllık deneyimli bir araştırmacısın. "
+              "Kaynakları eleştirel gözle değerlendirirsin.",
+    llm=llm,
+    verbose=True
+)
+
+writer = Agent(
+    role="İçerik Yazarı",
+    goal="Araştırma bulgularını akıcı, okunabilir bir makaleye dönüştür",
+    backstory="SEO ve içerik pazarlamasında uzman bir yazarsın.",
+    llm=llm
+)
+
+# Görevleri tanımla
+research_task = Task(
+    description="Agentic AI alanında 2026'nın en önemli 5 gelişmesini araştır.",
+    expected_output="5 maddelik bulgular listesi, her biri kaynakla",
+    agent=researcher
+)
+
+writing_task = Task(
+    description="Araştırma bulgularını 800 kelimelik bir blog yazısına dönüştür.",
+    expected_output="Başlık, giriş, 5 bölüm ve sonuç içeren makale",
+    agent=writer
+)
+
+# Mürettebatı oluştur ve çalıştır
+crew = Crew(
+    agents=[researcher, writer],
+    tasks=[research_task, writing_task],
+    verbose=True
+)
+
+result = crew.kickoff()
+print(result)
+```
+
+## Senaryolar
+
+### 1) İçerik Üretim Hattı
+
+```python
+from crewai import Agent, Task, Crew, Process
+from crewai_tools import SerperDevTool, WebsiteSearchTool
+
+search_tool = SerperDevTool()
+
+# Üç ajanlı içerik hattı
+researcher = Agent(
+    role="Araştırmacı",
+    goal="Güncel ve güvenilir bilgi topla",
+    tools=[search_tool],
+    llm=llm
+)
+
+seo_analyst = Agent(
+    role="SEO Uzmanı",
+    goal="Anahtar kelime analizi yap ve içerik yapısını optimize et",
+    llm=llm
+)
+
+content_writer = Agent(
+    role="İçerik Yazarı",
+    goal="SEO dostu, okuyucu odaklı içerik üret",
+    llm=llm
+)
+
+# Sıralı süreç
+crew = Crew(
+    agents=[researcher, seo_analyst, content_writer],
+    tasks=[research_task, seo_task, writing_task],
+    process=Process.sequential  # Sıralı — her görev bir öncekinin çıktısını kullanır
+)
+```
+
+### 2) Paralel Veri Toplama
+
+```python
+# Paralel süreç — ajanlar aynı anda çalışır
+crew = Crew(
+    agents=[data_collector_1, data_collector_2, data_collector_3],
+    tasks=[collect_social, collect_news, collect_academic],
+    process=Process.parallel  # Aynı anda çalış
+)
+
+aggregator_crew = Crew(
+    agents=[aggregator],
+    tasks=[aggregate_task]
+)
+
+# Önce paralel toplama, sonra birleştirme
+parallel_results = crew.kickoff()
+final = aggregator_crew.kickoff(inputs={"data": parallel_results})
+```
+
+### 3) Müşteri Destek Triyajı
+
+```python
+triage_agent = Agent(
+    role="Destek Triyaj Uzmanı",
+    goal="Gelen destek taleplerini aciliyete göre sınıflandır",
+    llm=ChatAnthropic(model="claude-haiku-3")  # Ucuz model — hızlı sınıflandırma
+)
+
+technical_agent = Agent(
+    role="Teknik Destek Uzmanı",
+    goal="Teknik sorunları çöz, kod örnekleri ver",
+    llm=ChatAnthropic(model="claude-sonnet-4-5")  # Orta model — kaliteli yanıt
+)
+
+escalation_agent = Agent(
+    role="Üst Kademe Uzmanı",
+    goal="Karmaşık veya acil sorunları ele al",
+    llm=ChatAnthropic(model="claude-opus-4")  # Pahalı — yalnızca kritik
+)
+```
+
+## Diğer araçlarla
+
+**LangChain araçlarıyla:** CrewAI, LangChain araç ekosistemiyle tam uyumludur:
+
+```python
+from langchain_community.tools import DuckDuckGoSearchRun, WikipediaQueryRun
+
+agent = Agent(
+    role="Araştırmacı",
+    tools=[DuckDuckGoSearchRun(), WikipediaQueryRun()]
+)
+```
+
+**MCP protokolüyle:** Sınırlı ancak büyüyen MCP desteği. Bkz. [MCP protokolü](/kavramlar/mcp-protokol).
+
+**CrewAI Cloud ile:** Barındırılan platform üzerinden crew'ları API olarak sunun, izleyin ve ölçeklendirin.
+
+**LangSmith ile:** CrewAI çıktılarını LangSmith'e yönlendirmek için LangChain callback entegrasyonu kullanabilirsiniz.
+
+**n8n ile:** n8n iş akışları (workflow) CrewAI crew'larını HTTP node üzerinden tetikleyebilir — no-code tetikleyici + AI işleme kombinasyonu.
+
+## Yaygın hatalar ve çözümleri
+
+<details>
+<summary>Ajan görevden sapıyor (off-task behavior)</summary>
+
+`backstory` ve `goal` alanlarını daha kısıtlayıcı yazın. `allow_delegation=False` ile diğer ajanlara görev devretmeyi engelleyin:
+
+```python
+agent = Agent(
+    role="Yalnızca veri analizçisi",
+    goal="SADECE sayısal veriyi analiz et, başka hiçbir şey yapma",
+    allow_delegation=False,
+    llm=llm
+)
+```
+
+</details>
+
+<details>
+<summary>Görev çıktısı beklenen formatta değil</summary>
+
+`expected_output` alanını çok daha kesin tanımlayın:
+
+```python
+task = Task(
+    description="Veriyi analiz et",
+    expected_output="""JSON formatında, şu anahtarlarla:
+    {"toplam": int, "ortalama": float, "en_yüksek": float, "özet": str}""",
+    agent=analyst
+)
+```
+
+</details>
+
+<details>
+<summary>Sonsuz ajan döngüsü</summary>
+
+```python
+# Maksimum iterasyon sınırı koy
+agent = Agent(
+    max_iter=5,   # Ajan en fazla 5 adım atar
+    max_rpm=10,   # Dakikada en fazla 10 API çağrısı
+    llm=llm
+)
+```
+
+</details>
+
+## Maliyet / limit
+
+<Callout type="uyari">
+Her ajan her görevde en az bir model çağrısı yapar. 5 ajanlı sıralı bir crew, tek bir çalıştırma için en az 5 model çağrısı üretir. Araştırma + ReAct döngüleriyle bu sayı 20-30'a çıkabilir. Hafif görevler için Haiku/Sonnet, yalnızca karmaşık planlama için Opus kullanın.
+</Callout>
+
+- **Açık kaynak — kendi altyapında:** Yalnızca model API maliyeti.
+- **CrewAI Cloud:** Barındırılan çalıştırmalar için ek ücret; kota planlarına bakın.
+- **Model maliyet stratejisi:** `max_rpm` parametresiyle API hız sınırı aşımını engelleyin.
+
+## Karşılaştırma
+
+[LangGraph vs CrewAI vs AutoGen](/karsilastirmalar/langgraph-vs-crewai-vs-autogen)
+
+[Framework seçim rehberi](/karsilastirmalar/framework-secim-rehberi)
+
+[Hangi araç ne zaman?](/karsilastirmalar/hangi-arac-ne-zaman)
+
+## Daha fazla
+
+- [CrewAI resmi dokümantasyonu](https://docs.crewai.com) — CrewAI
+- [CrewAI GitHub](https://github.com/joaomdmoura/crewai) — Açık kaynak
+- [CrewAI Discord](https://discord.gg/crewai) — Topluluk
+- [Modül 05: CrewAI Multi-Agent](/modul/05-crewai-multi-agent) — Bu sitede
+- [Çoklu ajan sistemleri](/kavramlar/multi-agent-systems) — Bu sitede

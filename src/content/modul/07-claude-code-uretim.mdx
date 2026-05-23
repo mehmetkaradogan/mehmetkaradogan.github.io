@@ -1,0 +1,339 @@
+---
+title: "Claude Code: Üretim Ortamında Kullanım"
+slug: 07-claude-code-uretim
+category: modul
+level: ileri
+summary: "Claude Code'u terminal-first otonom kodlama agent'ı olarak üretim ortamında yapılandırma, subagent modeli atama, MCP entegrasyonu ve GitHub Actions ile CI/CD hattına bağlama."
+updated: 2026-05-23
+tags: [claude-code, uretim, subagent, ci-cd, mcp, ileri]
+related: [06-mcp-sunucu-yazma, 08-antigravity-ile-build, 09-multi-model-orkestrasyon]
+modul: "07"
+sure: "120 dakika"
+onkosul: ["01-temeller", "02-ilk-tool-calling", "06-mcp-sunucu-yazma"]
+ciktilar:
+  - "Claude Code'u kurabilme ve temel komutları kullanabilme"
+  - "Subagent başına model atayarak maliyet optimize edebilme"
+  - "CLAUDE.md ile proje bağlamı tanımlayabilme"
+  - "GitHub Actions ile Claude Code'u CI/CD hattına entegre edebilme"
+---
+
+## Hedef
+
+Bu modülün sonunda Claude Code'u gerçek bir projeye entegre edebilecek, subagent maliyetlerini kontrol altına alacak ve GitHub Actions üzerinden otomatik kod inceleme ve düzeltme hattı kurabileceksin.
+
+## Önkoşullar
+
+- [Modül 06](/modul/06-mcp-sunucu-yazma) tamamlandı
+- Node.js 18+ yüklü
+- Anthropic API anahtarı
+- Git ve GitHub hesabı
+
+## Öğrenme çıktıları
+
+1. Claude Code'u global olarak kurup projeye bağlayabilirsin.
+2. `CLAUDE.md` ile agent'a proje bağlamı ve kısıtlamalar tanımlayabilirsin.
+3. Subagent başına model atama ile maliyet disiplini uygulayabilirsin.
+4. `--headless` modda CI/CD hattında çalıştırabilirsin.
+
+---
+
+## Adım 1 — Claude Code nedir?
+
+Claude Code, Anthropic'in 2025'te piyasaya sürdüğü terminal tabanlı otonom kodlama agent'ıdır. Özellikleri:
+
+- Tüm kod tabanını okur (1M token bağlam penceresi)
+- Çok dosyalı değişiklik yapar, test koşar, commit atar
+- MCP sunucularını yerel olarak kullanır
+- Subagent mimarisi: ana agent işi böler, alt agent'lar uzmanlaşır
+- `CLAUDE.md` ile proje spesifik davranış kuralları tanımlanır
+
+---
+
+## Adım 2 — Kurulum
+
+```bash
+# Global kurulum
+npm install -g @anthropic-ai/claude-code
+
+# Versiyon doğrula
+claude --version
+
+# Oturum aç
+claude login
+```
+
+<Callout type="uyari">
+Claude Code varsayılan olarak Opus modelini kullanabilir. Maliyet kontrolü için her zaman model ayarını yapılandır. Boşta oturum açık bırakma — `/stop` ile kapat.
+</Callout>
+
+---
+
+## Adım 3 — CLAUDE.md ile proje bağlamı
+
+Proje kök dizinine `CLAUDE.md` dosyası ekle. Claude Code her oturumda bu dosyayı okur:
+
+```markdown
+# Proje Bağlamı
+
+## Proje Hakkında
+Bu proje, Türkçe içerik yönetim sistemi (Content Management System — CMS) için REST API'si.
+Python 3.12, FastAPI, PostgreSQL kullanıyor.
+
+## Kod Standartları
+- Tüm fonksiyonlara docstring ekle
+- Type hint'leri zorunlu
+- Hata mesajları Türkçe olmalı
+- Test coverage %80 altına düşürme
+
+## Yapılmaması Gerekenler
+- Veritabanı migration'larını otomatik çalıştırma
+- Production ortamına doğrudan push etme
+- Gizli anahtarları koda gömme
+
+## Test Çalıştırma
+```bash
+pytest tests/ -v --cov=app
+```
+
+## Dağıtım (Deployment)
+Staging: `railway up --detach`
+Production: PR → CI onayı gerektirir
+```
+
+---
+
+## Adım 4 — Temel kullanım komutları
+
+```bash
+# Proje dizininde Claude Code başlat
+cd /proje/klasoru
+claude
+
+# Doğrudan sorgu (etkileşimli mod açmadan)
+claude -p "app/models.py dosyasındaki User modelini incele ve tip hatalarını bul"
+
+# Belirli dosyaları bağlama ekle
+claude --add app/main.py --add tests/test_main.py
+
+# Headless mod (CI/CD için)
+claude --headless -p "tüm testleri çalıştır ve başarısız olanları düzelt"
+
+# Model seç (maliyet için)
+claude --model claude-haiku-4-5 -p "docstring eksik fonksiyonları listele"
+```
+
+---
+
+## Adım 5 — Subagent model ataması
+
+Büyük görevlerde Claude Code işi subagent'lara böler. Her subagent'a farklı model atayabilirsin:
+
+```yaml
+# .claude/agents.yaml
+agents:
+  reviewer:
+    model: claude-sonnet-4-5      # Kod inceleme — orta maliyet
+    description: "Kod kalitesi ve güvenlik incelemesi"
+
+  linter:
+    model: claude-haiku-4-5       # Lint ve format — düşük maliyet
+    description: "Stil ve format denetimi"
+
+  architect:
+    model: claude-opus-4-5        # Mimari kararlar — yüksek maliyet
+    description: "Mimari tasarım ve refactoring kararları"
+    max_turns: 5                  # Pahalı model için tur sınırı
+```
+
+<Callout type="info">
+Maliyet disiplini: Rutin görevler (lint, format, test) için Haiku kullan. Karmaşık analiz için Sonnet. Mimari kararlar için Opus'u sınırlı tur sayısıyla kullan. Aynı görevi tümü Opus'la yaparsak haftalık fatura 3 haneli Euro'ya ulaşabilir.
+</Callout>
+
+---
+
+## Adım 6 — MCP entegrasyonu
+
+Claude Code için MCP sunucusu yapılandır (Modül 06'da yazdığın sunucu):
+
+```json
+// %APPDATA%\Claude\claude_desktop_config.json (Windows)
+// ~/.config/claude/claude_desktop_config.json (macOS/Linux)
+{
+  "mcpServers": {
+    "proje-araclari": {
+      "command": "python",
+      "args": ["C:/projeler/mcp-sunucu/sunucu.py"],
+      "env": {
+        "PROJE_KOKÜ": "C:/projeler/benim-projem"
+      }
+    },
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_..."
+      }
+    }
+  }
+}
+```
+
+---
+
+## Adım 7 — GitHub Actions ile CI entegrasyonu
+
+```yaml
+# .github/workflows/claude-review.yml
+name: Claude Code İnceleme
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  claude-review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Kodu çek
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Node.js kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Claude Code kur
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Değişen dosyaları bul
+        id: degisiklikler
+        run: |
+          DEGISIKLIKLER=$(git diff --name-only origin/main...HEAD | head -20)
+          echo "dosyalar=$DEGISIKLIKLER" >> $GITHUB_OUTPUT
+
+      - name: Claude Code ile incele
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          claude --headless \
+            --model claude-sonnet-4-5 \
+            -p "Bu PR'daki değişiklikleri incele: ${{ steps.degisiklikler.outputs.dosyalar }}
+               Güvenlik açıkları, performans sorunları ve kod kalitesi hatalarını raporla.
+               Markdown formatında, kısa ve net yaz." \
+            > inceleme.md
+
+      - name: PR'a yorum ekle
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const inceleme = fs.readFileSync('inceleme.md', 'utf8');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## Claude Code İncelemesi\n\n${inceleme}`
+            });
+```
+
+---
+
+## Adım 8 — Güvenli üretim yapılandırması
+
+```bash
+# İzin listesi: sadece belirtilen dizinlerde değişiklik yap
+claude --allow-paths src/ tests/ docs/ \
+       --deny-paths .env secrets/ .github/workflows/ \
+       -p "Tüm Python dosyalarına docstring ekle"
+
+# Sadece okuma — değişiklik yapma
+claude --read-only -p "Mimari sorunları analiz et ve rapor ver"
+
+# Onay gerektiren mod
+claude --require-approval always -p "Veritabanı migration dosyaları oluştur"
+```
+
+<Callout type="uyari">
+Üretim ortamında `--headless` modda çalışırken mutlaka `--allow-paths` ile izin verilen dizinleri kısıtla ve `--model` ile model seç. Kısıtsız çalışma hem güvenlik riski hem de maliyet tuzağıdır.
+</Callout>
+
+---
+
+## Egzersiz
+
+Aşağıdaki GitHub Actions workflow'unu tamamla:
+
+1. PR açıldığında çalışan bir workflow yaz.
+2. Claude Code (Haiku model) tüm Python dosyalarında PEP 8 uyumluluğunu kontrol etsin.
+3. Sorun bulursa PR'a liste halinde yorum yapsın.
+4. Sorun bulamazsa "Tüm dosyalar PEP 8 uyumlu" yorumu yapsın.
+
+<details>
+<summary>Çözüm (tıkla)</summary>
+
+```yaml
+# .github/workflows/pep8-check.yml
+name: PEP 8 Denetimi
+
+on:
+  pull_request:
+    paths: ['**.py']
+
+jobs:
+  pep8-check:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - run: npm install -g @anthropic-ai/claude-code
+
+      - name: PEP 8 denetimi
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          PYTHON_DOSYALAR=$(find . -name "*.py" -not -path "./.venv/*" | head -30 | tr '\n' ' ')
+          claude --headless \
+            --model claude-haiku-4-5 \
+            --read-only \
+            -p "Şu Python dosyalarını PEP 8 açısından incele: $PYTHON_DOSYALAR
+               Her sorun için: dosya adı, satır numarası, sorun açıklaması yaz.
+               Sorun yoksa sadece 'PEP 8 UYUMLU' yaz." \
+            > pep8_raporu.md
+
+      - name: Sonucu PR'a ekle
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const rapor = fs.readFileSync('pep8_raporu.md', 'utf8');
+            const baslik = rapor.includes('PEP 8 UYUMLU') && !rapor.includes('\n-')
+              ? '✓ Tüm dosyalar PEP 8 uyumlu'
+              : '⚠ PEP 8 sorunları bulundu';
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## ${baslik}\n\n${rapor}`
+            });
+```
+
+</details>
+
+---
+
+## Sonraki: [Modül 08 — Google Antigravity ile Build](/modul/08-antigravity-ile-build)
+
+Bir sonraki modülde Google Antigravity 2.0 ile agentic IDE ortamında çalışmayı, Plan Mode kullanımını ve Antigravity SDK ile özel agent geliştirmeyi öğreneceksin.

@@ -1,0 +1,219 @@
+---
+title: "İş Süreci Otomasyonu ile Tekrarlayan Görevleri Ortadan Kaldırma"
+slug: otomasyon
+category: senaryolar
+level: giris
+summary: "E-posta triajı, form işleme, rapor oluşturma ve SaaS entegrasyonu gibi tekrarlayan iş süreçlerinin ajanlar ve no-code araçlarla otomatize edilmesi."
+updated: 2026-05-23
+tags: ["otomasyon", "n8n", "make", "workflow", "hitl"]
+related: ["icerik-uretimi", "veri-toplama", "kisisel-bilgi-yonetimi"]
+---
+
+## Senaryo Tanımı
+
+İş süreci otomasyonu (business process automation) senaryosu, insan müdahalesi olmaksızın veya minimal müdahaleyle çalışan ajan tabanlı iş akışlarını kapsar. Geleneksel RPA (Robotic Process Automation) araçlarından farkı, LLM'in belirsiz girdileri anlayabilmesi, karar verebilmesi ve değişen bağlamlara uyum sağlayabilmesidir.
+
+Tipik kullanım durumları:
+- E-posta triajı ve otomatik yanıt taslakları
+- Müşteri destek biletlerinin önceliklendirilmesi
+- Haftalık raporların otomatik oluşturulması
+- Form verilerinin CRM'e aktarılması
+- Fatura işleme ve muhasebe girişleri
+- Sosyal medya moderasyonu
+
+<Callout type="info">
+Bu senaryo giriş seviyesinde sınıflandırılmıştır. Kodlama bilgisi zorunlu değildir — n8n veya Make ile sıfır kod yazarak başlayabilirsiniz. Kod yazmak isteyenler için Python örnekleri de verilmiştir.
+</Callout>
+
+---
+
+## Hangi Araçlar Uygundur?
+
+| Araç | Kullanım amacı | Bağlantı |
+|---|---|---|
+| n8n | Self-host no-code otomasyon + AI node'ları | [/araclar/n8n](/araclar/n8n) |
+| Make | Cloud tabanlı no-code otomasyon (150+ entegrasyon) | [/araclar/make](/araclar/make) |
+| Zapier | Hızlı prototip, 5000+ uygulama bağlantısı | [/araclar/zapier](/araclar/zapier) |
+| LangGraph | Karmaşık, durumlu otomasyon grafikleri (üretim) | [/araclar/langgraph](/araclar/langgraph) |
+| OpenAI Agents SDK | Birinci taraf otomasyon + handoff pipeline'ı | [/araclar/openai-agents-sdk](/araclar/openai-agents-sdk) |
+
+**Model önerisi:** Sınıflandırma ve kısa görevler için Haiku/Flash (maliyet verimli); karmaşık karar alma için Sonnet 4.5.
+
+---
+
+## Önerilen Workflow Deseni
+
+Otomasyon senaryoları için **Router** deseni uygundur: bir sınıflandırıcı ajan gelen görevi analiz eder ve uygun alt-ajana (subagent) yönlendirir.
+
+Detaylı desen açıklaması: [/workflow/desenler](/workflow/desenler)
+
+```
+[Tetikleyici: yeni e-posta / form / webhook]
+              ↓
+[Sınıflandırıcı ajan]
+  → kategori: destek / satış / spam / fatura
+              ↓
+     ┌────────┴────────┐
+[Destek ajanı]    [Satış ajanı]
+  → bilet aç         → CRM'e kaydet
+  → öncelik ata      → takip planla
+              ↓
+[İnsan onayı (HITL) — yüksek riskli işlemler]
+              ↓
+[Eylem: e-posta gönder / kayıt oluştur]
+```
+
+---
+
+## Adım Adım Örnek
+
+### Hedef
+Gelen müşteri e-postalarını otomatik sınıflandır, kategori + aciliyet belirle, uygun şablonla taslak yanıt oluştur.
+
+### Seçenek A — Python + OpenAI Agents SDK
+
+```python
+import os
+from agents import Agent, Runner, handoff, function_tool
+from typing import Literal
+
+# --- Araçlar ---
+@function_tool
+def create_support_ticket(
+    email_id: str,
+    category: str,
+    priority: Literal["dusuk", "orta", "yuksek", "kritik"],
+    summary: str
+) -> str:
+    """Destek sisteme yeni bilet oluştur."""
+    # Gerçek uygulamada Zendesk/Freshdesk API çağrısı
+    print(f"Bilet oluşturuldu: [{priority.upper()}] {category} - {summary}")
+    return f"Bilet #{email_id[:8]} oluşturuldu, öncelik: {priority}"
+
+@function_tool
+def draft_reply(email_content: str, tone: str = "profesyonel") -> str:
+    """E-posta yanıt taslağı oluştur."""
+    return f"[{tone.upper()} TASLAK] {email_content[:50]}... için yanıt hazırlandı."
+
+# --- Uzman ajanlar ---
+support_agent = Agent(
+    name="Destek Uzmanı",
+    instructions=(
+        "Teknik destek e-postalarını işliyorsun. "
+        "Her e-posta için: 1) bilet oluştur, 2) yanıt taslağı hazırla. "
+        "Kritik sorunları (sistem çökmesi, veri kaybı) 'kritik' öncelikli işaretle."
+    ),
+    tools=[create_support_ticket, draft_reply]
+)
+
+sales_agent = Agent(
+    name="Satış Uzmanı",
+    instructions=(
+        "Satış ve demo talepleri seni ilgilendiriyor. "
+        "CRM kaydı oluştur ve 24 saat içinde yanıt ver."
+    ),
+    tools=[draft_reply]
+)
+
+# --- Orkestratör ---
+triage_agent = Agent(
+    name="E-posta Triajı",
+    instructions=(
+        "Gelen e-postaları sınıflandır:\n"
+        "- teknik-destek → Destek Uzmanı'na aktar\n"
+        "- satis-talebi → Satış Uzmanı'na aktar\n"
+        "- spam → yoksay\n"
+        "Önce kategorileştir, sonra uygun ajana aktar."
+    ),
+    handoffs=[
+        handoff(support_agent),
+        handoff(sales_agent)
+    ]
+)
+
+# --- Örnek e-postayı işle ---
+sample_email = """
+Merhaba,
+Dün gece sistemimiz çöktü ve müşteri verilerine erişemiyoruz.
+Acil yardım gerekiyor!
+- Mehmet Yılmaz
+"""
+
+result = Runner.run_sync(triage_agent, sample_email)
+print(result.final_output)
+```
+
+<Callout type="ipucu">
+`handoff()` fonksiyonu OpenAI Agents SDK'da bir ajanın başka bir ajana kontrolü devretmesini sağlar. Bu, her uzman ajanın kendi alanında optimize edilmesine olanak tanır.
+</Callout>
+
+### Seçenek B — n8n ile No-Code
+
+<details>
+<summary>n8n e-posta triajı iş akışı</summary>
+
+1. **Email Trigger node:** Gmail veya IMAP ile yeni e-postaları dinle.
+2. **AI Agent node:** Claude veya GPT-4o mini ile e-postayı sınıflandır.
+   - Prompt: "Bu e-postayı sınıflandır: destek/satış/spam/fatura. JSON döndür: `{category, priority, summary}`"
+3. **Switch node:** Kategoriye göre farklı yollara yönlendir.
+4. **HTTP Request node (Zendesk):** Destek kategorisinde bilet oluştur.
+5. **HTTP Request node (HubSpot):** Satış kategorisinde CRM kaydı oluştur.
+6. **Gmail node:** Taslak yanıt oluştur (insan onayına bırak).
+
+Tüm iş akışı JSON olarak export edilip paylaşılabilir.
+
+</details>
+
+### Adım 3 — İnsan Onayı (HITL) Ekleme
+
+Kritik eylemlerde (para transferi, müşteri silme, sözleşme imzalama) **insan onayı (human-in-the-loop)** zorunludur:
+
+```python
+import anthropic
+
+client = anthropic.Anthropic()
+
+def request_human_approval(action: str, details: str) -> bool:
+    """Kritik eylemler için insan onayı iste."""
+    print(f"\n[ONAY GEREKLİ] {action}")
+    print(f"Detaylar: {details}")
+    response = input("Onaylıyor musunuz? (e/h): ").strip().lower()
+    return response == "e"
+
+# Webhook ile Slack'e bildirim göndermek daha gerçekçi bir yaklaşım
+def notify_slack_for_approval(action: str, details: str, webhook_url: str):
+    import requests
+    payload = {
+        "text": f"*Onay Gerekli:* {action}\n{details}\n*Yanıtla:* /approve veya /reject"
+    }
+    requests.post(webhook_url, json=payload)
+```
+
+---
+
+## No-Code Alternatif (Make.com)
+
+[Make](/araclar/make) ile fatura otomasyonu örneği:
+
+<details>
+<summary>Make fatura işleme senaryosu</summary>
+
+1. **Gmail Watch Emails:** Fatura konulu e-postaları izle.
+2. **OpenAI:** E-postadan tutar, tarih, tedarikçi bilgilerini çıkar.
+3. **Google Sheets:** Fatura verilerini kaydet.
+4. **Slack:** Muhasebe ekibine bildirim gönder.
+5. **Koşullu:** Tutar 10.000 TL üzerindeyse yönetici onayı iste.
+
+</details>
+
+---
+
+## İlgili Projeler
+
+- [/projeler/baslangic](/projeler/baslangic) — GitHub issue triage botu
+- [/projeler/orta](/projeler/orta) — Müşteri destek triajı + Slack handoff
+- [/projeler/orta](/projeler/orta) — Calendar + email + Notion entegre kişisel asistan
+
+<Callout type="uyari">
+Otomasyon senaryolarında, özellikle finansal işlemlerde ve kişisel veri işlemede, KVKK (Kişisel Verilerin Korunması Kanunu) ve ilgili mevzuata uyum sağlayın. Her zaman denetim izi (audit log) tutun.
+</Callout>

@@ -1,0 +1,170 @@
+---
+title: "Temel Kavramlar"
+slug: temel-kavramlar
+category: baslangic
+level: giris
+summary: "Agentic AI dünyasının temel yapı taşları: araç kullanımı, planlama, bellek, yansıma, MCP protokolü, RAG ve daha fazlası. Her kavram için derinlemesine sayfalara bağlantılar."
+updated: 2026-05-23
+tags: ["kavramlar", "tool-use", "planning", "memory", "reflection", "mcp", "rag", "giris"]
+related: ["agentic-ai-nedir", "ilk-agent", "ogrenme-yolu"]
+---
+
+## Genel Bakış
+
+Bir agent inşa etmek veya anlamak için birkaç temel kavramı sindirmeniz gerekir. Bu sayfa her kavramı kısa bir özetle tanıtır ve derinlemesine okuma için ilgili sayfaya yönlendirir. Kavramlar birbirini besler — hepsini sırayla okumak zorunda değilsiniz ama aralarındaki ilişkiyi görmek önemlidir.
+
+<Callout type="ipucu">
+Sıfırdan başlıyorsanız bu sayfayı yukarıdan aşağıya okuyun. Her kavram bloğunda "Ne zaman öğrenmeliyim?" yönlendirmesi bulacaksınız.
+</Callout>
+
+---
+
+## Araç Kullanımı (Tool Use) ve Fonksiyon Çağırma (Function Calling)
+
+Bir LLM kendi başına yalnızca metin üretir. **Araç kullanımı (tool use)**, modelin tanımlı harici fonksiyonları çağırmasını sağlar: web arama, kod çalıştırma, veritabanı sorgulama, e-posta gönderme. Teknik düzeyde bu, modelin JSON şeması olarak tanımlanmış bir fonksiyon adı ve argümanlar döndürmesiyle gerçekleşir — buna **fonksiyon çağırma (function calling)** denir.
+
+**Ne zaman öğrenmeliyim?** İlk agentinizi kurmadan önce bu kavramı anlamak zorunludur.
+
+[Tool Use sayfasına git →](/kavramlar/tool-use) · [Function Calling sayfasına git →](/kavramlar/function-calling)
+
+---
+
+## Planlama (Planning)
+
+**Planlama (planning)**, agent'ın karmaşık bir hedefi daha küçük, uygulanabilir adımlara bölme sürecidir. Üç yaygın yaklaşım:
+
+- **ReAct (Reason + Act):** Her adımda "ne düşünüyorum" + "ne yapıyorum" ikiliyle ilerler. En yaygın ve anlaşılır pattern.
+- **Plan-and-Execute:** Önce tüm planı yazar, sonra adım adım yürütür.
+- **Tree of Thoughts:** Birden fazla yolu paralel değerlendirir, en iyisini seçer.
+
+**Ne zaman öğrenmeliyim?** İlk agentinizi yaptıktan sonra, daha karmaşık görevler için çok adımlı planlama gerektiğinde.
+
+[Planning sayfasına git →](/kavramlar/planning)
+
+---
+
+## Bellek (Memory)
+
+LLM'ler varsayılan olarak her konuşmayı sıfırdan başlatır. **Bellek (memory)** sistemi bunu değiştirir:
+
+| Bellek Türü | Açıklama | Örnek |
+|---|---|---|
+| **Kısa vadeli** | Mevcut bağlam penceresi (context window) | Aktif konuşma |
+| **Uzun vadeli** | Vektör deposu (vector store) veya veritabanı | Kullanıcı tercihleri, geçmiş kararlar |
+| **Epizodik** | Oturum özetleri | "Geçen hafta şu dosyayı düzelttik" |
+| **Prosedürel** | Öğrenilen beceriler ve şablonlar | Tekrar eden görev kalıpları |
+
+**Ne zaman öğrenmeliyim?** Agent'ınızın oturumlar arasında bilgi taşıması gerektiğinde.
+
+[Memory sayfasına git →](/kavramlar/memory)
+
+---
+
+## Yansıma (Reflection)
+
+**Yansıma (reflection)**, agent'ın kendi ürettiği çıktıyı eleştirip düzeltmesidir. Reflexion pattern'inde agent bir yanıt üretir, ardından ayrı bir "eleştiri" adımında o yanıtın doğruluğunu, eksiksizliğini ve uygunluğunu değerlendirir; eksik görürse yeniden üretir.
+
+Bu sayede ajan, insan geri bildirimi olmadan kaliteyi artırabilir.
+
+**Ne zaman öğrenmeliyim?** Çıktı kalitesi kritik olan görevlerde (kodlama, raporlama) bu pattern vazgeçilmezdir.
+
+[Reflection sayfasına git →](/kavramlar/reflection)
+
+---
+
+## MCP Protokolü (Model Context Protocol)
+
+**MCP (Model Context Protocol)**, Anthropic'in 2024 sonunda açık kaynak olarak yayınladığı ve 2026 itibarıyla fiili standart haline gelen araç entegrasyon protokolüdür. OpenAI, Google ve 200'den fazla topluluk sunucusu tarafından desteklenmektedir.
+
+MCP sayesinde bir agent, GitHub, Slack, Postgres, Stripe, Figma, Docker gibi servislere standart bir arayüzle bağlanır. Her servis bir **MCP sunucusu (MCP server)** olarak yayınlanır; agent bunları keşfeder ve kullanır.
+
+**Ne zaman öğrenmeliyim?** Agent'ınızı harici servislerle entegre etmek istediğinizde MCP, doğal ilk seçenektir.
+
+[MCP Protokolü sayfasına git →](/kavramlar/mcp-protokol)
+
+---
+
+## RAG ve Agentic RAG
+
+**RAG (Retrieval-Augmented Generation — Erişim Destekli Üretim)**, modelin yanıt üretmeden önce bir bilgi deposundan ilgili belgeleri getirmesidir. Klasik RAG sabit bir sorgulama mantığıyla çalışır.
+
+**Agentic RAG** ise agent'ın hangi belgeleri, ne zaman ve nasıl getireceğine dinamik olarak karar verdiği yapıdır. Agent retrieval'ı bir araç olarak kullanır; sonuçlar yetersizse farklı sorgu stratejisi dener.
+
+**Ne zaman öğrenmeliyim?** Büyük belge koleksiyonlarını agent'a entegre etmek istediğinizde.
+
+[RAG ve Agentic RAG sayfasına git →](/kavramlar/rag-ve-agentic-rag)
+
+---
+
+## Çok Ajanlı Sistemler (Multi-Agent Systems) ve Orkestrasyon
+
+Tek bir agent tüm işi sırayla yapmak zorunda değildir. **Çok ajanlı sistemler (multi-agent systems)** görevleri uzmanlaşmış agentlara böler:
+
+- **Manager-Worker:** Orkestratör agent görevi alt agentlara dağıtır.
+- **Group Chat:** Agentlar eşler arası mesajlaşır, sonuç oylamayla veya konsensüsle elde edilir.
+- **Hiyerarşik:** Katmanlı yönetim; manager → middle agent → worker.
+
+**Agent orkestrasyon (agent orchestration)**, bu agentların akışını, mesajlaşmasını ve durum (state) yönetimini koordine etme işidir.
+
+<Callout type="uyari">
+Çok ajanlı sistemlerde her agent-arası mesaj model çağrısı yapar. Tüm agentları pahalı modelde çalıştırmak maliyeti hızla artırır. Her agent için uygun model seçin.
+</Callout>
+
+[Multi-Agent Systems sayfasına git →](/kavramlar/multi-agent-systems) · [Agent Orchestration sayfasına git →](/kavramlar/agent-orchestration)
+
+---
+
+## Döngüde İnsan (Human-in-the-Loop)
+
+**Human-in-the-loop (HITL)** tasarımında agent, kritik veya geri alınamaz adımlarda durur ve insan onayı bekler. Para transferi, e-posta gönderme, production deploy gibi eylemler için bu yaklaşım güvenlik açısından zorunlu olabilir.
+
+Google Antigravity'nin "Co-Pilot" modu ve Claude Code'un onay istemleri bu tasarımın örnekleridir.
+
+[Human-in-the-Loop sayfasına git →](/kavramlar/human-in-the-loop)
+
+---
+
+## Model Bağlam Yönetimi (Model Context Management)
+
+LLM'lerin bağlam pencereleri sınırlıdır (token limiti). Uzun görevlerde pencere dolar ve eski bilgiler düşer. **Model bağlam yönetimi (model context management)** bunu çözen teknikler bütünüdür:
+
+- **Compaction (sıkıştırma):** Eski konuşma geçmişini özetleyerek kısaltır.
+- **Pointer index:** Tam metni tutmak yerine referans indeksleri saklar.
+- **Checkpoint:** Agent durumunu periyodik olarak kaydeder, kesinti sonrası kaldığı yerden devam eder.
+
+[Model Context Management sayfasına git →](/kavramlar/model-context-management)
+
+---
+
+## A2A Protokolü (Agent-to-Agent Protocol)
+
+**A2A (Agent-to-Agent) Protocol**, MCP'nin araç entegrasyonunu tamamlar: farklı şirket veya sistemlere ait agentların birbiriyle doğrudan iletişim kurmasını sağlar. 2026 itibarıyla ikinci standart olarak güçlenmektedir.
+
+[A2A Protokolü sayfasına git →](/kavramlar/a2a-protokol)
+
+---
+
+## Tüm Kavramlar
+
+Ansiklopedik kavram sayfaları için [/kavramlar](/kavramlar) bölümüne gidin. Öne çıkan sayfalar:
+
+- [Tool Use](/kavramlar/tool-use)
+- [Planning](/kavramlar/planning)
+- [Memory](/kavramlar/memory)
+- [Reflection](/kavramlar/reflection)
+- [Multi-Agent Systems](/kavramlar/multi-agent-systems)
+- [Agent Orchestration](/kavramlar/agent-orchestration)
+- [Human-in-the-Loop](/kavramlar/human-in-the-loop)
+- [RAG ve Agentic RAG](/kavramlar/rag-ve-agentic-rag)
+- [Model Context Management](/kavramlar/model-context-management)
+- [Function Calling](/kavramlar/function-calling)
+- [MCP Protokolü](/kavramlar/mcp-protokol)
+- [A2A Protokolü](/kavramlar/a2a-protokol)
+
+---
+
+## Sonraki Adım
+
+Kavramları kavradınız. Şimdi kod yazarak ilk agentınızı oluşturun:
+
+[İlk Agent'ı Kur →](/baslangic/ilk-agent)

@@ -1,0 +1,139 @@
+---
+title: "Claude Code vs OpenAI Codex vs Google Antigravity: Agentic Kodlama Araçları Karşılaştırması"
+slug: claude-code-vs-codex-vs-antigravity
+category: karsilastirmalar
+level: orta
+summary: "Claude Code, OpenAI Codex ve Google Antigravity 2.0'ı 12 boyutta karşılaştıran kapsamlı rehber. Terminal, computer use ve IDE tercihlerinize göre doğru aracı seçin."
+updated: 2026-05-23
+tags: [claude-code, openai-codex, google-antigravity, agentic-coding, ide, karsilastirma]
+related: [langgraph-vs-crewai-vs-autogen, framework-secim-rehberi, multi-model-stratejileri]
+tools: ["claude-code", "openai-codex", "google-antigravity"]
+---
+
+## Kime Hangisi?
+
+Agentic kodlama (agentic coding) alanında 2026'nın üç büyük oyuncusu farklı felsefeleri temsil ediyor:
+
+- **Claude Code** → Terminal'de yaşıyorsanız, 1M token bağlamla tüm kod tabanını okutmak istiyorsanız, MCP ekosistemini kullanıyorsanız.
+- **OpenAI Codex** → Bilgisayar kontrolü (computer use) gerektiren görevler, yapılandırılmış araç çağırma, geniş OpenAI ekosistemiyle entegrasyon.
+- **Google Antigravity 2.0** → Gemini ekosisteminde çalışıyorsanız, görsel IDE tercih ediyorsanız, ücretsiz başlangıç için, tarayıcı kontrolüne (browser control) ihtiyaç duyuyorsanız.
+
+<Callout type="not">
+Google Antigravity, Kasım 2025'te çıkan ve Mayıs 2026'da 2.0 sürümüyle bağımsız bir agent orchestration masaüstü uygulamasına dönüşen Gemini 3 Pro tabanlı agentic IDE'dir. Eski Gemini CLI'yın resmi halefidir.
+</Callout>
+
+---
+
+## Büyük Karşılaştırma Tablosu
+
+| Boyut | Claude Code | OpenAI Codex | Google Antigravity 2.0 |
+|---|---|---|---|
+| **Otonomi seviyesi** | Yüksek; çok dosyalı değişiklik, test koşma, commit atma | Yüksek; computer use ile OS seviyesinde kontrol | Yüksek; Plan Mode + Agent Manager |
+| **Arayüz** | Terminal (CLI) | API + web arayüzü | VS Code fork + masaüstü app + CLI + SDK |
+| **Ana model** | Claude Sonnet 4.5 / Opus 4 | GPT-4o + computer use modeli | Gemini 3 Pro (öncelik); Claude Sonnet 4.5, GPT-OSS desteği |
+| **Bağlam penceresi** | 1M token | 128K token | Gemini 3 Pro ile 1M+ token |
+| **Durum yönetimi (state)** | Oturum bazlı; memory.md dosyası ile çapraz oturum hafıza | Oturum bazlı; Assistants API ile persistent thread | Yerleşik bilgi tabanı; agent öğrendiklerini geri yazar |
+| **MCP desteği** | Native; resmi protokol sahibi Anthropic | Kısmi; topluluk eklentileri | Kısmi; SDK üzerinden |
+| **A2A desteği** | Subagent + Agent Teams yapısı | Yok (resmi) | Agent Manager üzerinden deneysel |
+| **Gözlemlenebilirlik (observability)** | Agent View (Anthropic); trace desteği | OpenAI Dashboard; trace | AI Studio entegrasyonu |
+| **Computer use** | Mevcut (Claude Computer Use) | Birinci sınıf özellik | Browser tool yerleşik |
+| **Öğrenme eğrisi** | Düşük; tek komutla başlar | Orta; API entegrasyonu gerekir | Düşük; görsel IDE |
+| **Fiyat** | Token başı API; Pro plan mevcut | Token başı API; computer use ek maliyet | Bireyler için ücretsiz public preview |
+| **İşletim sistemi** | macOS, Linux, Windows | API (platform bağımsız) | macOS, Windows, Linux |
+| **Deployment / üretim** | CLI; GitHub Actions; subagent YAML | API entegrasyonu; Assistants v2 | SDK ile özelleştirme; Agent Manager |
+| **Üretim olgunluğu** | Yüksek; geniş kurumsal kullanım | Yüksek; OpenAI ekosistemi | Orta; public preview aşamasında |
+
+---
+
+## 3 Mini Vaka Çalışması
+
+### Vaka 1: Tek Geliştirici — Büyük Refactoring
+
+Bir geliştirici, 80.000 satırlık bir Python monorepo'yu mikroservislere bölmek istiyor. Tüm kod tabanını anlayan, bağımlılıkları takip eden ve dosyalar arası tutarlı değişiklik yapan bir araç gerekiyor.
+
+**Seçim: Claude Code**
+
+1M token bağlamı sayesinde Claude Code tüm repo'yu okuyabilir. `memory.md` dosyasına mimari kararları kaydeder; bir sonraki oturumda kaldığı yerden devam eder. Terminal'den çalıştığı için CI/CD pipeline'ına kolayca entegre edilir.
+
+```bash
+# Proje kökünde başlat
+claude
+
+# Claude, CLAUDE.md ve memory.md dosyalarını okur
+# Sonra görevi ver:
+> Bu repo'daki authentication modülünü bağımsız bir FastAPI servisine ayır.
+> Tüm import'ları güncelle, testleri koştur ve değişiklikleri commit et.
+```
+
+Claude Code şunları otomatik yapar: ilgili dosyaları tanımlar, bağımlılık haritası çıkarır, değişiklikleri uygular, testleri çalıştırır, başarılıysa commit atar.
+
+---
+
+### Vaka 2: Ürün Ekibi — Web App Test Otomasyonu
+
+Bir ürün ekibi, yeni özelliklerin tarayıcıda gerçekten çalışıp çalışmadığını otomatik test etmek istiyor. Ekran görüntüsü alarak, form doldurup, buton tıklayarak end-to-end test.
+
+**Seçim: OpenAI Codex (Computer Use)**
+
+Codex'in computer use yeteneği tarayıcıyı piksel seviyesinde kontrol eder. Bir UI değiştiğinde script güncellemek yerine Codex "ekranı gör, tıkla" mantığıyla çalışır.
+
+```python
+from openai import OpenAI
+
+client = OpenAI()
+
+# Computer use ile tarayıcı kontrolü
+response = client.responses.create(
+    model="computer-use-preview",
+    tools=[{"type": "computer_use_preview"}],
+    input=[{
+        "role": "user",
+        "content": (
+            "https://app.example.com adresine git. "
+            "Kullanıcı adı 'test@example.com', şifre 'test123' ile giriş yap. "
+            "Dashboard'da yeni proje oluştur, adını 'Test Projesi' yap ve kaydet. "
+            "İşlemin başarılı olduğunu doğrula."
+        )
+    }]
+)
+```
+
+---
+
+### Vaka 3: Startup — Hızlı Prototip, Gemini Ekosistemi
+
+Küçük bir startup, Gemini API'yi kullanan bir proje üzerinde çalışıyor. Görsel IDE istiyorlar, bireysel geliştiriciler için ücretsiz başlangıç şart, browser kontrolü gerekiyor.
+
+**Seçim: Google Antigravity 2.0**
+
+Antigravity'nin Plan Mode'u görevi adımlara böler ve onay ister. Agent Manager birden fazla ajan çalıştırmayı görselleştirir. Browser tool ile web araştırması ve form doldurma yerleşik olarak gelir. Bireyler için ücretsiz public preview, sıfır başlangıç maliyeti.
+
+<Callout type="ipucu">
+Antigravity'de model seçimini dikkatli yapın. Varsayılan Gemini 3 Pro güçlü ama maliyetlidir. Rutin görevler için Claude Sonnet 4.5 veya GPT-OSS ile maliyet düşürülebilir.
+</Callout>
+
+---
+
+## Yanlış Seçimin Maliyeti
+
+**Araç-görev uyumsuzluğu:** Antigravity'yi terminal ağırlıklı CI/CD pipeline'ına entegre etmeye çalışmak ciddi zaman kaybı yaratır; araç bu senaryo için tasarlanmamıştır. Tersine, Claude Code'u browser otomasyon görevleri için kullanmak computer use eklentisi gerektirip orijinal avantajını eritir.
+
+**Bağlam penceresi hatası:** 80.000 satırlık bir kod tabanını 128K token bağlamlı bir araçla analiz etmeye çalışmak, ya kodun bölünmesini ya da kritik bağlamın kaybedilmesini zorunlu kılar. Büyük repo işleri için 1M bağlamlı araçlar tercih edin.
+
+**Ücretsiz plan yanılgısı:** Antigravity'nin ücretsiz public preview'ı cazip görünür; ancak üretim yükleri için ücretli plan farkları ve Gemini 3 Pro token maliyeti hızla birikir. Maliyet modelini baştan netleştirin. Ayrıca bkz. [Model Context Management](/kavramlar/model-context-management).
+
+**MCP ekosistemi kararı:** Claude Code'un MCP native desteği, 200+ MCP sunucusuna (GitHub, Slack, Postgres, Stripe, Figma, Docker) doğrudan erişim sağlar. Codex veya Antigravity ile aynı entegrasyonlar için ek eklenti ve konfigürasyon gerekir. Eğer MCP ağırlıklı bir iş akışı kuruyorsanız bu fark belirleyici olur.
+
+<Callout type="uyari">
+Computer use özelliği tüm araçlarda ek maliyet getirir ve standart API çağrısından daha yavaştır. Browser kontrol görevleri için zaman ve maliyet bütçenizi buna göre ayarlayın.
+</Callout>
+
+---
+
+## İlgili Araçlar
+
+- [Claude Code](/araclar/claude-code) — Anthropic'in terminal tabanlı agentic coding CLI'ı
+- [OpenAI Codex](/araclar/openai-codex) — Computer use destekli OpenAI agentic coding aracı
+- [Google Antigravity](/araclar/google-antigravity) — Gemini 3 Pro tabanlı agentic IDE
+- [Framework Seçim Rehberi](/karsilastirmalar/framework-secim-rehberi) — Daha geniş ekosistem kararları
+- [MCP Protokol](/kavramlar/mcp-protokol) — Model Context Protocol hakkında detaylı bilgi

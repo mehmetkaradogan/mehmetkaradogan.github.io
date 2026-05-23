@@ -1,0 +1,180 @@
+---
+// src/components/SearchModal.astro
+// Pagefind search modal. Opens on Cmd/Ctrl+K.
+// Loads /pagefind/pagefind-ui.js which exists after build; degrades gracefully in dev.
+---
+
+<!-- Trigger button (used in TopBar) -->
+<button
+  id="search-trigger"
+  type="button"
+  aria-label="Ara (Ctrl+K)"
+  aria-haspopup="dialog"
+  aria-expanded="false"
+  aria-controls="search-modal"
+  class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors"
+  style="background-color: var(--bg-subtle); color: var(--text-secondary); border: 1px solid var(--border-color);"
+>
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <circle cx="11" cy="11" r="8"/>
+    <path d="m21 21-4.35-4.35"/>
+  </svg>
+  <span class="hidden sm:inline">Ara</span>
+  <kbd class="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-mono" style="background-color: var(--bg-base); border: 1px solid var(--border-color);">
+    <span class="text-xs">⌘</span>K
+  </kbd>
+</button>
+
+<!-- Modal overlay -->
+<div
+  id="search-modal"
+  role="dialog"
+  aria-modal="true"
+  aria-label="Site içi arama"
+  class="fixed inset-0 z-[100] hidden"
+>
+  <!-- Backdrop -->
+  <div
+    id="search-backdrop"
+    class="absolute inset-0"
+    style="background-color: rgba(0,0,0,0.5); backdrop-filter: blur(2px);"
+  ></div>
+
+  <!-- Panel -->
+  <div
+    class="relative z-10 mx-auto mt-16 sm:mt-24 max-w-xl w-full px-4"
+    role="document"
+  >
+    <div
+      class="rounded-2xl shadow-2xl overflow-hidden"
+      style="background-color: var(--bg-surface); border: 1px solid var(--border-color);"
+    >
+      <!-- Header with close -->
+      <div class="flex items-center justify-between px-4 py-3 border-b" style="border-color: var(--border-color);">
+        <span class="text-sm font-medium" style="color: var(--text-secondary);">Site İçi Arama</span>
+        <button
+          id="search-close"
+          type="button"
+          aria-label="Aramayı kapat"
+          class="w-7 h-7 rounded-md flex items-center justify-center transition-colors"
+          style="color: var(--text-muted);"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M18 6 6 18M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Pagefind UI container -->
+      <div id="pagefind-ui-container" class="p-4">
+        <!-- Pagefind injects its own UI here -->
+        <p class="text-sm text-center py-8" style="color: var(--text-muted);" id="search-fallback">
+          Arama yükleniyor&hellip;
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Pagefind CSS -->
+<link rel="stylesheet" href="/pagefind/pagefind-ui.css" id="pagefind-css" />
+
+<style>
+  #pagefind-ui-container .pagefind-ui__form {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  #pagefind-ui-container .pagefind-ui__search-input {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--border-color);
+    background-color: var(--bg-base);
+    color: var(--text-primary);
+    font-size: 0.875rem;
+  }
+  #pagefind-ui-container .pagefind-ui__results {
+    max-height: 60vh;
+    overflow-y: auto;
+  }
+</style>
+
+<script>
+  let pagefindLoaded = false;
+
+  function openModal() {
+    const modal = document.getElementById('search-modal');
+    const trigger = document.getElementById('search-trigger');
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    trigger?.setAttribute('aria-expanded', 'true');
+    document.body.style.overflow = 'hidden';
+
+    // Load Pagefind UI lazily
+    if (!pagefindLoaded) {
+      pagefindLoaded = true;
+      const script = document.createElement('script');
+      script.src = '/pagefind/pagefind-ui.js';
+      script.onload = () => {
+        const fallback = document.getElementById('search-fallback');
+        if (fallback) fallback.remove();
+        // @ts-ignore — Pagefind global
+        if (typeof PagefindUI !== 'undefined') {
+          // @ts-ignore
+          new PagefindUI({
+            element: '#pagefind-ui-container',
+            showImages: false,
+            resetStyles: false,
+            translations: {
+              placeholder: 'Aranacak kelime...',
+              zero_results: '[QUERY] için sonuç bulunamadı.',
+            },
+          });
+        }
+      };
+      script.onerror = () => {
+        const fb = document.getElementById('search-fallback');
+        if (fb) fb.textContent = 'Arama servisi şu an kullanılamıyor (geliştirme modu).';
+      };
+      document.head.appendChild(script);
+    }
+
+    // Focus first input after a tick
+    setTimeout(() => {
+      const input = document.querySelector<HTMLInputElement>('#pagefind-ui-container input');
+      input?.focus();
+    }, 50);
+  }
+
+  function closeModal() {
+    const modal = document.getElementById('search-modal');
+    const trigger = document.getElementById('search-trigger');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    trigger?.setAttribute('aria-expanded', 'false');
+    document.body.style.overflow = '';
+  }
+
+  function initSearch() {
+    document.getElementById('search-trigger')?.addEventListener('click', openModal);
+    document.getElementById('search-close')?.addEventListener('click', closeModal);
+    document.getElementById('search-backdrop')?.addEventListener('click', closeModal);
+
+    document.addEventListener('keydown', (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        const modal = document.getElementById('search-modal');
+        if (modal?.classList.contains('hidden')) {
+          openModal();
+        } else {
+          closeModal();
+        }
+      }
+      if (e.key === 'Escape') closeModal();
+    });
+  }
+
+  initSearch();
+  document.addEventListener('astro:after-swap', initSearch);
+</script>

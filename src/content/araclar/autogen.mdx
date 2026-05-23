@@ -1,0 +1,244 @@
+---
+title: "AutoGen"
+slug: autogen
+category: araclar
+level: orta
+summary: "Microsoft'un çoklu ajan konuşma çerçevesi; bakım moduna alınmıştır — yeni projeler için önerilmez, Microsoft Agent Framework veya LangGraph kullanın."
+updated: 2026-05-23
+tags: ["framework", "multi-agent", "microsoft", "bakım-modu"]
+related: ["langgraph", "crewai", "semantic-kernel"]
+vendor: "Microsoft"
+toolType: "framework"
+license: "MIT (açık kaynak)"
+os: ["macOS", "Linux", "Windows"]
+primary_model: "Model bağımsız (GPT, Claude, Gemini)"
+last_review: 2026-05-23
+status: "maintenance"
+---
+
+<Callout type="uyari">
+AutoGen bakım modundadır (maintenance mode). Microsoft, aktif geliştirmeyi "Microsoft Agent Framework"e taşımıştır. AutoGen yeni özellik almayacak; yalnızca kritik güvenlik yamaları uygulanacaktır. Yeni projeler için LangGraph (üretim) veya CrewAI (prototip) kullanın. Mevcut AutoGen projeleriniz çalışmaya devam eder ancak uzun vadede migration planlaması yapmanız önerilir.
+</Callout>
+
+## Nedir?
+
+AutoGen, Microsoft Research tarafından geliştirilen ve LLM (büyük dil modeli) ajanlarının birbirleriyle konuşma (conversation) yoluyla işbirliği yapmasını sağlayan bir çoklu ajan çerçevesidir (multi-agent conversation framework). "Grup sohbeti (group chat)" mimarisiyle birden fazla ajan — UserProxy, AssistantAgent, GroupChatManager — arasında mesajlaşma döngüsü kurarak karmaşık görevleri tamamlar. 2023-2024 döneminde araştırma topluluğunda çok popüler olan AutoGen, 2025 sonunda Microsoft'un stratejisini "Microsoft Agent Framework"e yöneltmesiyle bakım moduna alınmıştır.
+
+<Callout type="not">
+Bu sayfa, AutoGen'in tarihsel önemini ve mevcut durumunu belgeler. AutoGen ile yazılmış mevcut kodunuzu anlayabilmek veya bakımını yapabilmek için bu belge yararlıdır. Yeni proje başlatıyorsanız aşağıdaki "Ne yerine kullanılır?" bölümüne bakın.
+</Callout>
+
+## Tarihsel Önem
+
+AutoGen, 2023 yılında çoklu ajan araştırmalarını demokratize eden önemli bir açık kaynak projesiydi:
+
+- **Grup sohbeti mimarisi:** Ajanların birbirlerine mesaj göndererek işbirliği yapması konseptini popülerleştirdi.
+- **Kod yürütme sıfır güven:** UserProxy ajanın kodu sandbox'ta çalıştırması ve sonucu diğer ajanlara iletmesi yenilikçiydi.
+- **Araştırma katkısı:** Onlarca akademik çalışmada referans çerçeve olarak kullanıldı.
+- **Ekosistem:** AutoGen etrafında geniş bir topluluk ve kullanım senaryosu kütüphanesi oluştu.
+
+## Ne için iyi (tarihsel bağlamda)
+
+- Araştırma ortamlarında hızlı deney — akademik çalışmalar için yeterince yetkin.
+- Grup sohbeti (group chat) mimarisini anlamak isteyenler için referans uygulama.
+- Mevcut AutoGen tabanlı projelerin bakımı ve küçük iyileştirmeleri.
+- Microsoft ekosistemi (Azure OpenAI) ile entegre basit ajan denemeleri.
+
+## Ne için kötü
+
+- **Yeni projeler:** Bakım modu nedeniyle kesinlikle önerilmez.
+- **Üretim ortamları:** Durum kalıcılığı, gözlemlenebilirlik ve hata yönetimi zayıf.
+- **Uzun vadeli destek:** Yeni özellik gelmeyecek, ekosistem büyümeyecek.
+- **Derin entegrasyon:** MCP, A2A gibi güncel protokollerle entegrasyon sınırlı.
+
+## Ne yerine kullanılır?
+
+| Senaryo | Önerilen Araç |
+|---|---|
+| Üretim çoklu ajan sistemi | [LangGraph](/araclar/langgraph) |
+| Hızlı prototipleme (1 gün) | [CrewAI](/araclar/crewai) |
+| Microsoft ekosistemi entegrasyonu | Microsoft Agent Framework (Semantic Kernel üzeri) |
+| Birinci taraf SDK | [OpenAI Agents SDK](/araclar/openai-agents-sdk) veya [Claude Agent SDK](/araclar/claude-agent-sdk) |
+
+## Kurulum (mevcut projeler için)
+
+```bash
+# Mevcut AutoGen projelerini desteklemek için (yeni proje için kullanmayın)
+pip install pyautogen
+
+# Ortam değişkenleri
+export OPENAI_API_KEY="sk-proj-..."
+# veya Azure OpenAI için
+export AZURE_OPENAI_ENDPOINT="https://..."
+export AZURE_OPENAI_API_KEY="..."
+```
+
+## Temel Kullanım (referans — mevcut kod anlama)
+
+```python
+# Mevcut AutoGen kodunu anlamak için referans
+import autogen
+
+# Yapılandırma
+config_list = [
+    {
+        "model": "gpt-4o",
+        "api_key": os.environ["OPENAI_API_KEY"]
+    }
+]
+
+llm_config = {"config_list": config_list}
+
+# Asistan ajan
+assistant = autogen.AssistantAgent(
+    name="asistan",
+    llm_config=llm_config,
+    system_message="Yardımcı bir AI asistanısın."
+)
+
+# Kullanıcı proxy ajanı (kodu çalıştırır)
+user_proxy = autogen.UserProxyAgent(
+    name="kullanici",
+    human_input_mode="NEVER",  # Otomatik mod
+    max_consecutive_auto_reply=5,
+    code_execution_config={"work_dir": "./sandbox"}
+)
+
+# Konuşmayı başlat
+user_proxy.initiate_chat(
+    assistant,
+    message="Fibonacci serisinin ilk 10 elemanını hesapla."
+)
+```
+
+## Senaryolar
+
+### 1) Grup Sohbeti (Mevcut Kod Anlama)
+
+```python
+# AutoGen grup sohbeti mimarisi — referans
+groupchat = autogen.GroupChat(
+    agents=[user_proxy, planner, engineer, critic],
+    messages=[],
+    max_round=12
+)
+
+manager = autogen.GroupChatManager(
+    groupchat=groupchat,
+    llm_config=llm_config
+)
+
+# Görev başlat
+user_proxy.initiate_chat(manager, message="Veri analizi pipeline'ı tasarla.")
+```
+
+### 2) LangGraph'a Migration (Önerilen Geçiş)
+
+```python
+# AutoGen'den LangGraph'a geçiş örüntüsü
+# Önce: AutoGen AssistantAgent + UserProxyAgent
+# Sonra: LangGraph StateGraph + Node fonksiyonları
+
+from langgraph.graph import StateGraph
+
+# AutoGen'deki AssistantAgent yerine
+def assistant_node(state):
+    response = model.invoke(state["messages"])
+    return {"messages": [response]}
+
+# AutoGen'deki UserProxyAgent yerine
+def executor_node(state):
+    # Kodu güvenli sandbox'ta çalıştır
+    result = safe_execute(state["code"])
+    return {"messages": [result], "execution_result": result}
+
+graph = StateGraph(AgentState)
+graph.add_node("assistant", assistant_node)
+graph.add_node("executor", executor_node)
+```
+
+### 3) Microsoft Agent Framework'e Geçiş
+
+```python
+# Microsoft Agent Framework (Semantic Kernel üzeri) kullanımı
+# AutoGen'in resmi halefi için bkz. /araclar/semantic-kernel
+from semantic_kernel.agents import ChatCompletionAgent
+
+agent = ChatCompletionAgent(
+    service_id="azure_openai",
+    name="Asistan",
+    instructions="Yardımcı bir AI asistanısın."
+)
+```
+
+## Diğer araçlarla
+
+**Semantic Kernel ile:** Microsoft, AutoGen kullanıcılarını Semantic Kernel tabanlı Microsoft Agent Framework'e yönlendiriyor. Bkz. [Semantic Kernel](/araclar/semantic-kernel).
+
+**Azure OpenAI ile:** AutoGen, Azure OpenAI Service ile iyi entegre olur — bu entegrasyon mevcut projelerde çalışmaya devam eder.
+
+**LangGraph ile:** AutoGen iş akışlarını LangGraph'a taşımak için yukarıdaki migration örüntüsünü kullanın.
+
+## Yaygın hatalar ve çözümleri
+
+<details>
+<summary>Sürüm uyumsuzluğu (version compatibility)</summary>
+
+AutoGen sürüm geçişleri (0.2 → 0.4) kırılma değişiklikleri (breaking change) içerir. Mevcut projenizin gerektirdiği sürümü sabitlemek için:
+
+```bash
+pip install pyautogen==0.2.38  # Belirli sürüm
+```
+
+</details>
+
+<details>
+<summary>Sonsuz konuşma döngüsü</summary>
+
+```python
+user_proxy = autogen.UserProxyAgent(
+    max_consecutive_auto_reply=5,  # Maksimum yanıt sayısını sınırla
+    is_termination_msg=lambda x: "GÖREV_TAMAMLANDI" in x.get("content", "")
+)
+```
+
+</details>
+
+<details>
+<summary>Kod yürütme sandbox güvenlik riski</summary>
+
+Varsayılan kod yürütme yapılandırması güvensiz olabilir. Docker sandbox kullanın:
+
+```python
+code_execution_config={
+    "use_docker": True,
+    "work_dir": "./sandbox"
+}
+```
+
+</details>
+
+## Maliyet / limit
+
+- **Bakım modu maliyeti:** Kod çalışır ancak optimizasyon veya yeni özellik gelmez.
+- **Model maliyeti:** AutoGen varsayılan olarak her mesaj döngüsünde model çağrısı yapar; uzun grup sohbetleri çok sayıda çağrı üretir.
+- **Migration maliyeti:** LangGraph veya CrewAI'a geçiş, refactor süresi gerektirir; erken geçiş, uzun vadede daha düşük teknik borç demektir.
+
+<Callout type="uyari">
+AutoGen üzerine yeni bir üretim sistemi inşa etmek uzun vadede yüksek teknik borç (technical debt) yaratır. Migration için zaman ayırmanızı şiddetle öneririz. Bkz. [LangGraph vs CrewAI vs AutoGen](/karsilastirmalar/langgraph-vs-crewai-vs-autogen).
+</Callout>
+
+## Karşılaştırma
+
+[LangGraph vs CrewAI vs AutoGen](/karsilastirmalar/langgraph-vs-crewai-vs-autogen)
+
+[Framework seçim rehberi](/karsilastirmalar/framework-secim-rehberi)
+
+## Daha fazla
+
+- [AutoGen GitHub](https://github.com/microsoft/autogen) — Microsoft (bakım modu)
+- [AutoGen dokümantasyonu](https://microsoft.github.io/autogen/) — Microsoft
+- [Microsoft Agent Framework duyurusu](https://techcommunity.microsoft.com/t5/microsoft-developer-community/bg-p/MicrosoftDeveloperCommunity) — Microsoft Tech Community
+- [LangGraph](/araclar/langgraph) — Önerilen alternatif (üretim)
+- [CrewAI](/araclar/crewai) — Önerilen alternatif (prototipleme)
+- [Semantic Kernel](/araclar/semantic-kernel) — Microsoft ekosistemi için önerilen yol

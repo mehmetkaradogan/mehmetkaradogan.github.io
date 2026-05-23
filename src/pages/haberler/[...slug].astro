@@ -1,0 +1,46 @@
+---
+// src/pages/haberler/[...slug].astro
+
+import DocLayout from '@layouts/DocLayout.astro';
+import Callout from '@components/mdx/Callout.astro';
+import Badge from '@components/Badge.astro';
+import { getCollection } from 'astro:content';
+
+
+export async function getStaticPaths() {
+  const entries = await getCollection('haberler', (e) => !e.data.draft);
+  return entries.map((entry) => ({
+    params: { slug: entry.slug },
+    props: { entry },
+  }));
+}
+
+const { entry } = Astro.props;
+const { Content, headings } = await entry.render();
+const fm = entry.data;
+---
+
+<DocLayout
+  title={fm.title}
+  description={fm.summary}
+  headings={headings}
+  frontmatter={fm}
+  breadcrumbs={[
+    { label: 'Haberler', href: '/haberler' },
+    { label: fm.title },
+  ]}
+  section="Haberler"
+>
+  <!-- Haber meta -->
+  <div class="not-prose flex items-center gap-3 mb-6 flex-wrap">
+    <Badge label={fm.newsType} variant={`newsType-${fm.newsType}`} />
+    <time class="text-sm" style="color: var(--text-muted);" datetime={fm.date.toISOString()}>
+      {fm.date.toLocaleDateString('tr-TR', { year: 'numeric', month: 'long', day: 'numeric' })}
+    </time>
+    {fm.source && (
+      <span class="text-sm" style="color: var(--text-muted);">Kaynak: {fm.source}</span>
+    )}
+  </div>
+
+  <Content components={{ Callout }} />
+</DocLayout>

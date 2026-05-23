@@ -1,0 +1,58 @@
+---
+// src/components/PrevNext.astro
+// Prev/Next navigation for ordered content (modules, etc.)
+
+export interface NavEntry {
+  title: string;
+  href: string;
+}
+
+export interface Props {
+  prev?: NavEntry;
+  next?: NavEntry;
+}
+
+const { prev, next } = Astro.props;
+---
+
+{(prev || next) && (
+  <nav
+    aria-label="Önceki/Sonraki sayfa"
+    class="mt-12 pt-8 border-t grid grid-cols-1 sm:grid-cols-2 gap-4"
+    style="border-color: var(--border-color);"
+  >
+    {prev ? (
+      <a
+        href={prev.href}
+        class="group flex flex-col gap-1 p-4 rounded-xl border transition-all hover:shadow-sm"
+        style="background-color: var(--bg-surface); border-color: var(--border-color);"
+        rel="prev"
+      >
+        <span class="text-xs font-medium" style="color: var(--text-muted);">
+          ← Önceki
+        </span>
+        <span class="text-sm font-semibold group-hover:underline" style="color: var(--text-primary);">
+          {prev.title}
+        </span>
+      </a>
+    ) : (
+      <div aria-hidden="true" />
+    )}
+
+    {next && (
+      <a
+        href={next.href}
+        class="group flex flex-col gap-1 p-4 rounded-xl border transition-all hover:shadow-sm sm:text-right"
+        style="background-color: var(--bg-surface); border-color: var(--border-color);"
+        rel="next"
+      >
+        <span class="text-xs font-medium" style="color: var(--text-muted);">
+          Sonraki →
+        </span>
+        <span class="text-sm font-semibold group-hover:underline" style="color: var(--text-primary);">
+          {next.title}
+        </span>
+      </a>
+    )}
+  </nav>
+)}

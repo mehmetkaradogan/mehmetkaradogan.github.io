@@ -1,0 +1,254 @@
+---
+title: "Google Drive Entegrasyonu"
+slug: google-drive
+category: entegrasyonlar
+level: orta
+summary: "Agent'larınızı Google Drive ile entegre edin. Resmi MCP sunucusu, Google Docs okuma/yazma, dosya arama ve doküman otomasyon senaryoları."
+updated: 2026-05-23
+tags: ["google-drive", "mcp", "google-docs", "dosya-yonetimi", "otomasyon"]
+related: ["mcp-sunucu-listesi", "notion", "github"]
+---
+
+## Ne İşe Yarar?
+
+**Google Drive**, Google'ın bulut dosya depolama ve iş birliği platformudur. Agent entegrasyonu şunları sağlar:
+
+- Google Docs, Sheets ve Drive dosyalarını okuma ve yazma.
+- Belge arama ve içerik analizi.
+- Rapor ve doküman otomasyonu.
+- Toplantı notları, teklifler, analizleri otomatik üretme.
+
+<Callout type="info">
+Google Drive için resmi bir MCP sunucusu mevcuttur ve Claude Code ile kullanılabilir. Alternatif olarak Google API Python istemcisi doğrudan entegrasyon için yeterlidir.
+</Callout>
+
+---
+
+## Kurulum ve Bağlantı
+
+### Seçenek A — Resmi Google Drive MCP Sunucusu
+
+Google'ın yayınladığı resmi MCP sunucusu:
+
+```bash
+npx @google/drive-mcp-server
+```
+
+Kimlik doğrulama için Google Cloud Console'da OAuth 2.0 kimlik bilgileri oluşturun:
+
+1. [console.cloud.google.com](https://console.cloud.google.com) → "APIs & Services" → "Enable APIs" → Google Drive API ve Google Docs API'yi etkinleştirin.
+2. "Credentials" → "Create Credentials" → "OAuth 2.0 Client ID" → Desktop application.
+3. `credentials.json` dosyasını indirin.
+
+```json
+{
+  "mcpServers": {
+    "google-drive": {
+      "command": "npx",
+      "args": ["-y", "@google/drive-mcp-server"],
+      "env": {
+        "GOOGLE_CREDENTIALS_PATH": "/Users/kullanici/.config/google/credentials.json"
+      }
+    }
+  }
+}
+```
+
+### Seçenek B — Google API Python İstemcisi
+
+```bash
+pip install google-api-python-client google-auth-httplib2 google-auth-oauthlib
+```
+
+```python
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
+from pathlib import Path
+import pickle
+
+SCOPES = [
+    "https://www.googleapis.com/auth/drive.readonly",
+    "https://www.googleapis.com/auth/documents",
+]
+
+def get_google_service(api: str, version: str):
+    creds = None
+    token_path = Path("token.pickle")
+
+    if token_path.exists():
+        with open(token_path, "rb") as f:
+            creds = pickle.load(f)
+
+    if not creds or not creds.valid:
+        flow = InstalledAppFlow.from_client_secrets_file("credentials.json", SCOPES)
+        creds = flow.run_local_server(port=0)
+        with open(token_path, "wb") as f:
+            pickle.dump(creds, f)
+
+    return build(api, version, credentials=creds)
+
+drive_service = get_google_service("drive", "v3")
+docs_service = get_google_service("docs", "v1")
+```
+
+---
+
+## Pratik Senaryolar
+
+### Senaryo 1 — Google Docs Doküman Okuma ve Analiz
+
+```python
+import anthropic
+
+client_ai = anthropic.Anthropic()
+
+def read_google_doc(doc_id: str) -> str:
+    """Google Docs dokümanından düz metin çıkarır."""
+    document = docs_service.documents().get(documentId=doc_id).execute()
+    full_text = []
+
+    for element in document.get("body", {}).get("content", []):
+        if "paragraph" in element:
+            for para_element in element["paragraph"].get("elements", []):
+                if "textRun" in para_element:
+                    full_text.append(para_element["textRun"]["content"])
+
+    return "".join(full_text)
+
+def analyze_document(doc_id: str) -> str:
+    content = read_google_doc(doc_id)
+
+    response = client_ai.messages.create(
+        model="claude-sonnet-4-5",
+        max_tokens=1000,
+        messages=[
+            {
+                "role": "user",
+                "content": (
+                    "Aşağıdaki dokümanı analiz et. "
+                    "Ana temalar, önemli kararlar ve aksiyon maddeleri nelerdir?\n\n"
+                    f"{content[:8000]}"
+                ),
+            }
+        ],
+    )
+    return response.content[0].text
+```
+
+### Senaryo 2 — Otomatik Rapor Oluşturma
+
+Airtable veya başka bir kaynaktan gelen veriyle Google Docs raporu oluşturma:
+
+```python
+def create_weekly_report(report_data: dict, folder_id: str) -> str:
+    """Haftalık raporu Google Docs'ta oluşturur ve Drive'a kaydeder."""
+    # Önce boş bir Google Doc oluştur
+    doc = docs_service.documents().create(
+        body={"title": f"Haftalık Rapor — {report_data['tarih']}"}
+    ).execute()
+    doc_id = doc["documentId"]
+
+    # İçerik oluştur
+    response = client_ai.messages.create(
+        model="claude-sonnet-4-5",
+        max_tokens=2000,
+        messages=[
+            {
+                "role": "user",
+                "content": (
+                    "Aşağıdaki verileri kullanarak profesyonel bir haftalık rapor yaz. "
+                    "Başlık, özet, metrikler ve öneriler bölümlerini içersin.\n\n"
+                    f"{str(report_data)}"
+                ),
+            }
+        ],
+    )
+    report_text = response.content[0].text
+
+    # Dokümana içerik ekle
+    docs_service.documents().batchUpdate(
+        documentId=doc_id,
+        body={
+            "requests": [
+                {
+                    "insertText": {
+                        "location": {"index": 1},
+                        "text": report_text,
+                    }
+                }
+            ]
+        },
+    ).execute()
+
+    # Dokümanı belirtilen klasöre taşı
+    drive_service.files().update(
+        fileId=doc_id,
+        addParents=folder_id,
+        fields="id, parents",
+    ).execute()
+
+    return f"https://docs.google.com/document/d/{doc_id}"
+
+# Kullanım
+report_url = create_weekly_report(
+    report_data={"tarih": "2026-05-23", "trafik": 12400, "donusum": "3.2%"},
+    folder_id="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs",
+)
+print(f"Rapor oluşturuldu: {report_url}")
+```
+
+### Senaryo 3 — Drive'da Dosya Arama ve Özetleme
+
+```python
+def search_and_summarize(query: str, max_files: int = 5) -> list[dict]:
+    """Drive'da arama yapar ve bulunan dokümanları özetler."""
+    results = drive_service.files().list(
+        q=f"fullText contains '{query}' and mimeType='application/vnd.google-apps.document'",
+        pageSize=max_files,
+        fields="files(id, name, modifiedTime)",
+    ).execute()
+
+    summaries = []
+    for file in results.get("files", []):
+        content = read_google_doc(file["id"])
+        response = client_ai.messages.create(
+            model="claude-haiku-4-5",
+            max_tokens=200,
+            messages=[
+                {
+                    "role": "user",
+                    "content": f"Şu dokümanı 2 cümleyle özetle:\n\n{content[:3000]}",
+                }
+            ],
+        )
+        summaries.append({
+            "baslik": file["name"],
+            "id": file["id"],
+            "ozet": response.content[0].text,
+            "guncelleme": file["modifiedTime"],
+        })
+
+    return summaries
+```
+
+---
+
+## Yaygın Sorunlar
+
+| Sorun | Neden | Çözüm |
+|---|---|---|
+| `Access blocked` OAuth ekranı | Google Cloud uygulaması doğrulanmamış | Test kullanıcısı olarak kendi e-postanızı ekleyin |
+| `token.pickle` süresi doldu | OAuth token expired | `token.pickle` dosyasını silin ve yeniden oturum açın |
+| `Insufficient Permission` | Scope eksik | `SCOPES` listesine gerekli izni ekleyin |
+| Boş doküman içeriği | Doc ID yanlış | Drive'da "Share" linkinden doğru ID'yi alın |
+| Rate limit (`429`) | Drive API kotası aşıldı | Exponential backoff uygulayın |
+
+---
+
+## İlgili Sayfalar
+
+- [Dokumantasyon Senaryosu](/senaryolar/dokumantasyon)
+- [Otomasyon Senaryosu](/senaryolar/otomasyon)
+- [MCP Sunucu Listesi](/entegrasyonlar/mcp-sunucu-listesi)
+- [Notion Entegrasyonu](/entegrasyonlar/notion)

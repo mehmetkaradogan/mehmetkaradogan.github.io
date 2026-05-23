@@ -1,0 +1,62 @@
+---
+// src/components/Badge.astro
+// Reusable tag/badge chip. Used for level labels, tags, etc.
+
+export interface Props {
+  /** Display text */
+  label: string;
+  /** Visual variant — accepts any string; known values get styled */
+  variant?: string;
+  /** Optional extra CSS classes */
+  class?: string;
+}
+
+const { label, variant = 'default', class: extraClass = '' } = Astro.props;
+
+const variantClasses: Record<string, string> = {
+  'level-giris':          'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
+  'level-orta':           'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
+  'level-ileri':          'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300',
+  'newsType-launch':      'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300',
+  'newsType-update':      'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
+  'newsType-deprecation': 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300',
+  'newsType-research':    'bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-300',
+  'status-active':        'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
+  'status-maintenance':   'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
+  'status-deprecated':    'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300',
+  'default':              'bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300',
+};
+
+const levelLabels: Record<string, string> = {
+  giris: 'Giriş',
+  orta:  'Orta',
+  ileri: 'İleri',
+};
+
+const newsTypeLabels: Record<string, string> = {
+  launch:      'Yeni Çıkış',
+  update:      'Güncelleme',
+  deprecation: 'Kullanım Dışı',
+  research:    'Araştırma',
+};
+
+const statusLabels: Record<string, string> = {
+  active:      'Aktif',
+  maintenance: 'Bakımda',
+  deprecated:  'Kullanım Dışı',
+};
+
+function resolveLabel(v: string, l: string): string {
+  if (v.startsWith('level-')) return levelLabels[v.replace('level-', '')] ?? l;
+  if (v.startsWith('newsType-')) return newsTypeLabels[v.replace('newsType-', '')] ?? l;
+  if (v.startsWith('status-')) return statusLabels[v.replace('status-', '')] ?? l;
+  return l;
+}
+
+const displayLabel = resolveLabel(variant, label);
+const cls = variantClasses[variant] ?? variantClasses['default'];
+---
+
+<span class={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${cls} ${extraClass}`}>
+  {displayLabel}
+</span>

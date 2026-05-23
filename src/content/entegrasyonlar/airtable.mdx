@@ -1,0 +1,218 @@
+---
+title: "Airtable Entegrasyonu"
+slug: airtable
+category: entegrasyonlar
+level: orta
+summary: "Agent'larınızı Airtable veritabanlarıyla entegre edin. REST API kurulumu, kayıt okuma/yazma, veri toplama pipeline'ları ve otomasyon senaryoları."
+updated: 2026-05-23
+tags: ["airtable", "api", "veritabani", "veri-toplama", "otomasyon"]
+related: ["mcp-sunucu-listesi", "notion", "google-drive"]
+---
+
+## Ne İşe Yarar?
+
+**Airtable**, elektronik tablo görünümüne sahip ancak ilişkisel veritabanı gücü sunan bir platformdur. Agent entegrasyonu şunları mümkün kılar:
+
+- Veri toplama pipeline'larının sonuçlarını Airtable'a yazma.
+- Mevcut kayıtları okuyup analiz yapma veya sınıflandırma.
+- İçerik veya proje takibini agent'la otomatikleştirme.
+- Airtable'ı agent'ın yapılandırılmış veri deposu olarak kullanma.
+
+<Callout type="ipucu">
+Airtable'ın REST API'si basit ve belgelidir. MCP sunucusu da mevcuttur; ancak doğrudan API yeterince esnek olduğundan hafif projelerde MCP katmanına gerek olmayabilir.
+</Callout>
+
+---
+
+## Kurulum ve Bağlantı
+
+### API Anahtarı Alma
+
+1. [airtable.com/account](https://airtable.com/account) → "Developer hub" → "Personal access tokens" → yeni token oluşturun.
+2. Token'a şu kapsamları verin: `data.records:read`, `data.records:write`, `schema.bases:read`.
+3. İlgili base'i (veritabanını) token kapsamına ekleyin.
+
+```bash
+pip install pyairtable
+```
+
+### Temel Bağlantı
+
+```python
+from pyairtable import Api
+
+AIRTABLE_TOKEN = "patXXXXXXXXXXXXXX"
+BASE_ID = "appXXXXXXXXXXXXXX"
+
+api = Api(AIRTABLE_TOKEN)
+table = api.table(BASE_ID, "İçerik Takvimi")
+
+# Tüm kayıtları listele
+records = table.all()
+for record in records[:3]:
+    print(record["fields"])
+```
+
+### MCP Sunucusu ile Kullanım
+
+Topluluk tarafından geliştirilen Airtable MCP sunucusu:
+
+```json
+{
+  "mcpServers": {
+    "airtable": {
+      "command": "npx",
+      "args": ["-y", "airtable-mcp-server"],
+      "env": {
+        "AIRTABLE_API_KEY": "patXXXXXXXXXXXXXX",
+        "AIRTABLE_BASE_ID": "appXXXXXXXXXXXXXX"
+      }
+    }
+  }
+}
+```
+
+---
+
+## Pratik Senaryolar
+
+### Senaryo 1 — Veri Toplama ve Sınıflandırma Pipeline'ı
+
+Web'den scrape edilen veriyi AI ile sınıflandırıp Airtable'a yazan agent:
+
+```python
+import anthropic
+from pyairtable import Api
+
+client_ai = anthropic.Anthropic()
+api = Api("patXXXXXXXXXXXXXX")
+table = api.table("appXXXXXXXXXXXXXX", "Ürün Geri Bildirimleri")
+
+RAW_FEEDBACKS = [
+    "Uygulama çok yavaş, özellikle mobilde.",
+    "Harika bir ürün, tasarımı çok temiz.",
+    "Ödeme sayfası bazen hata veriyor.",
+]
+
+def classify_feedback(text: str) -> dict:
+    response = client_ai.messages.create(
+        model="claude-haiku-4-5",
+        max_tokens=200,
+        messages=[
+            {
+                "role": "user",
+                "content": (
+                    "Aşağıdaki müşteri geri bildirimini sınıflandır. "
+                    "JSON formatında döndür: "
+                    '{"kategori": "hata|öneri|olumlu|diğer", "öncelik": "yüksek|orta|düşük", "özet": "tek cümle"}\n\n'
+                    f"Geri bildirim: {text}"
+                ),
+            }
+        ],
+    )
+    import json
+    return json.loads(response.content[0].text)
+
+def ingest_feedbacks():
+    for feedback in RAW_FEEDBACKS:
+        classification = classify_feedback(feedback)
+        table.create({
+            "Ham Metin": feedback,
+            "Kategori": classification["kategori"],
+            "Öncelik": classification["öncelik"],
+            "Özet": classification["özet"],
+            "Durum": "Yeni",
+        })
+        print(f"Eklendi: {classification['özet']}")
+
+ingest_feedbacks()
+```
+
+### Senaryo 2 — İçerik Takvimi Yönetimi
+
+Airtable'daki içerik takviminden "Onaylandı" durumundaki kayıtları çekip blog yazısı üreten agent:
+
+```python
+def generate_approved_posts():
+    approved = table.all(formula="({Durum}='Onaylandı')")
+
+    for record in approved:
+        fields = record["fields"]
+        topic = fields.get("Konu", "")
+        keywords = fields.get("Anahtar Kelimeler", "")
+
+        response = client_ai.messages.create(
+            model="claude-sonnet-4-5",
+            max_tokens=2000,
+            messages=[
+                {
+                    "role": "user",
+                    "content": (
+                        f"'{topic}' konusunda SEO odaklı bir blog yazısı yaz. "
+                        f"Şu anahtar kelimeleri doğal şekilde kullan: {keywords}. "
+                        "Türkçe, ~800 kelime, H2 ve H3 başlıkları içersin."
+                    ),
+                }
+            ],
+        )
+        blog_post = response.content[0].text
+
+        # Airtable kaydını güncelle
+        table.update(record["id"], {
+            "Blog İçeriği": blog_post[:99900],  # Airtable long text limiti
+            "Durum": "İçerik Hazır",
+        })
+        print(f"Yazıldı: {topic}")
+```
+
+### Senaryo 3 — Otomatik Raporlama
+
+Airtable verilerini periyodik olarak özetleyip raporlayan agent:
+
+```python
+def generate_weekly_report() -> str:
+    records = table.all(
+        formula="AND({Tarih} >= '2026-05-17', {Tarih} <= '2026-05-23')"
+    )
+    summary_data = "\n".join(
+        f"- {r['fields'].get('Başlık', 'Başlıksız')}: {r['fields'].get('Durum', 'Bilinmiyor')}"
+        for r in records
+    )
+
+    response = client_ai.messages.create(
+        model="claude-haiku-4-5",
+        max_tokens=600,
+        messages=[
+            {
+                "role": "user",
+                "content": (
+                    "Aşağıdaki haftalık içerik takvimi verilerini özetle. "
+                    "Tamamlanan, devam eden ve geciken maddeleri belirt.\n\n"
+                    f"{summary_data}"
+                ),
+            }
+        ],
+    )
+    return response.content[0].text
+```
+
+---
+
+## Yaygın Sorunlar
+
+| Sorun | Neden | Çözüm |
+|---|---|---|
+| `403 Forbidden` | Token'ın base'e erişimi yok | Token oluştururken ilgili base'i kapsamlara ekleyin |
+| `422 Unprocessable Entity` | Alan adı hatalı | Airtable'da tam alan adını (büyük/küçük harf dahil) kontrol edin |
+| Kayıt oluşturulmuyor | Zorunlu alan eksik | Tablodaki zorunlu alanları `fields` dict'ine ekleyin |
+| Rate limit (`429`) | Dakikada 5 istek sınırı | İstekler arasına `time.sleep(0.2)` ekleyin |
+| Long text truncated | 100.000 karakter sınırı | İçeriği bölerek birden fazla kayda yazın |
+
+---
+
+## İlgili Sayfalar
+
+- [Veri Toplama Senaryosu](/senaryolar/veri-toplama)
+- [Otomasyon Senaryosu](/senaryolar/otomasyon)
+- [MCP Sunucu Listesi](/entegrasyonlar/mcp-sunucu-listesi)
+- [Notion Entegrasyonu](/entegrasyonlar/notion)

@@ -1,0 +1,218 @@
+---
+title: "n8n"
+slug: n8n
+category: araclar
+level: giris
+summary: "Self-host edilebilen açık kaynak iş akışı otomasyon platformu; 400+ entegrasyon, görsel akış oluşturucu ve yerleşik AI düğümleriyle no-code/low-code AI otomasyon için en güçlü self-host seçeneği."
+updated: 2026-05-23
+tags: ["no-code-automation", "self-host", "iş-akışı", "entegrasyon"]
+related: ["make", "zapier", "langgraph"]
+vendor: "n8n GmbH"
+toolType: "no-code-automation"
+license: "Sustainable Use License (kaynak kodu açık, self-host ücretsiz)"
+os: ["macOS", "Linux", "Windows", "Docker", "Cloud"]
+primary_model: "Model bağımsız (OpenAI, Anthropic, Gemini entegrasyonları var)"
+last_review: 2026-05-23
+status: "active"
+---
+
+## Nedir?
+
+n8n (okunuş: "nodemation"), self-host edilebilen açık kaynaklı bir iş akışı (workflow) otomasyon platformudur. Görsel bir akış oluşturucusu (flow builder) ile 400'den fazla uygulama ve servisle entegrasyon kurar; LLM araç çağırımı, ajan akışları ve AI destekli iş süreçleri için yerleşik AI düğümleri içerir. No-code ve low-code kullanıcılarına hitap ederken JavaScript/Python kodu çalıştırma yeteneğiyle geliştiriciler için de esnek bir platform sunar. Kendi sunucunuzda çalıştırabilirsiniz — verileriniz sizde kalır.
+
+## Ne için iyi
+
+- **Self-host + veri gizliliği:** Hassas verileri kendi altyapınızda işlemek isteyenler için en iyi seçenek.
+- **Geniş entegrasyon:** Slack, Google Workspace, Notion, Airtable, Stripe, Postgres ve 400+ servis.
+- **AI iş akışları:** LLM çağrısı, RAG, metin sınıflandırma, özet üretimi gibi AI görevlerini görsel akışa entegre etme.
+- **Webhook tetikleyicileri:** Dış servislerden gelen olayları anında yakalama.
+- **Maliyet avantajı:** Bulut planları olmadan self-host ile yalnızca sunucu maliyeti.
+- **Topluluk şablonları:** Yüzlerce hazır iş akışı şablonu — sıfırdan başlamadan çalışan iş akışı.
+- **JavaScript düğümü:** Kod yazmak isteyen kullanıcılar için tam esneklik.
+
+## Ne için kötü
+
+- **Karmaşık ajan orkestrasyonu:** Derin durum yönetimi ve çoklu ajan koordinasyonu için LangGraph daha uygundur.
+- **Gerçek zamanlı düşük gecikme:** n8n görsel iş akışları her adım arasında biraz gecikme ekler.
+- **Üst düzey programatik kontrol:** Kod ağırlıklı projeler için doğrudan SDK kullanmak daha esnek.
+- **Sunucu yönetimi yükü:** Self-host için altyapı bilgisi gerektirir — yönetim istemiyorsanız Make veya Zapier daha kolaydır.
+
+## Kurulum
+
+```bash
+# Docker ile en kolay kurulum (önerilen)
+docker run -it --rm \
+  --name n8n \
+  -p 5678:5678 \
+  -v ~/.n8n:/home/node/.n8n \
+  n8nio/n8n
+
+# Docker Compose ile (kalıcı kurulum)
+# docker-compose.yml dosyası oluştur:
+```
+
+```yaml
+# docker-compose.yml
+version: '3.8'
+services:
+  n8n:
+    image: n8nio/n8n
+    restart: always
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=guclu_sifre
+      - WEBHOOK_URL=https://sizin-alan-adiniz.com
+    volumes:
+      - ~/.n8n:/home/node/.n8n
+```
+
+```bash
+docker-compose up -d
+
+# npm ile global kurulum (alternatif)
+npm install -g n8n
+n8n start
+```
+
+<Callout type="ipucu">
+n8n, `http://localhost:5678` adresinde açılır. İlk kullanımda hesap oluşturun. Bulut sürümü için n8n.cloud adresinden ücretsiz deneme başlatabilirsiniz.
+</Callout>
+
+## İlk çalıştırma
+
+1. Tarayıcıda `http://localhost:5678` adresini açın.
+2. Hesap oluşturun ve giriş yapın.
+3. "New Workflow" butonuna tıklayın.
+4. Arama çubuğuna "Webhook" yazın, düğümü sürükleyin.
+5. Ardından "OpenAI" veya "Anthropic" düğümü ekleyin.
+6. İki düğümü bağlayın (ok çizerek).
+7. Webhook URL'sini test edin: `curl -X POST http://localhost:5678/webhook/test -d '{"soru":"Merhaba!"}'`
+
+## Senaryolar
+
+### 1) AI Destekli E-posta Triyajı
+
+```
+Tetikleyici: Gmail (yeni e-posta)
+    ↓
+AI Düğümü: Claude ile sınıflandır (Acil/Normal/Önemsiz)
+    ↓
+Koşul Düğümü: Kategori == "Acil"?
+    ├── Evet → Slack'e bildirim gönder + Takvime ekle
+    └── Hayır → Notion veritabanına kaydet
+```
+
+n8n'de bu akış ~10 düğümle görsel olarak kurulur, kod gerekmez.
+
+### 2) İçerik Üretim Boru Hattı
+
+```javascript
+// n8n Code düğümünde JavaScript
+// RSS feed'den başlıkları çek
+const baslıklar = $input.all().map(item => item.json.title);
+
+// Her başlık için prompt hazırla
+return baslıklar.slice(0, 5).map(baslik => ({
+  json: {
+    prompt: `"${baslik}" başlığı için 300 kelimelik blog yazısı yaz.`,
+    baslik: baslik
+  }
+}));
+```
+
+Bu çıktı doğrudan Anthropic veya OpenAI düğümüne bağlanır.
+
+### 3) Veri Toplama + Sınıflandırma Pipeline
+
+```
+Zamanlayıcı (Cron): Her gün 09:00
+    ↓
+HTTP Request: Haber API'sinden veri çek
+    ↓
+Split In Batches: 10'lu gruplar halinde işle
+    ↓
+Anthropic Düğümü: Her haberi kategorize et (Teknoloji/İş/Spor)
+    ↓
+Airtable: Sınıflandırılmış haberleri tabloya ekle
+    ↓
+Slack: Özet rapor gönder
+```
+
+## Diğer araçlarla
+
+**LangGraph/CrewAI ile:** n8n, LangGraph veya CrewAI ile oluşturulmuş AI servislerini HTTP Request düğümü aracılığıyla tetikleyebilir. n8n zamanlama ve entegrasyon katmanı, Python çerçevesi AI katmanı görevi görür.
+
+**MCP ile:** n8n, MCP sunucularına bağlanan özel HTTP Request akışları kurabilir. Bkz. [MCP protokolü](/kavramlar/mcp-protokol).
+
+**GitHub Actions ile:** n8n workflow'larını GitHub olayları tetikleyebilir; CI/CD sonuçlarını n8n üzerinden bildirim sistemine taşıyabilirsiniz.
+
+**Obsidian ile:** n8n → Obsidian vault'una dosya yazarak ajan çıktılarını otomatik notlara dönüştürebilir. Bkz. [Obsidian AI](/araclar/obsidian-ai).
+
+## Yaygın hatalar ve çözümleri
+
+<details>
+<summary>Webhook dışarıdan erişilemiyor</summary>
+
+Self-host n8n'de webhookların dışarıdan erişilebilmesi için HTTPS ve alan adı gereklidir. Geçici çözüm:
+
+```bash
+# ngrok ile tünel aç (geliştirme için)
+ngrok http 5678
+# Oluşan HTTPS URL'yi n8n ayarlarında WEBHOOK_URL olarak gir
+```
+
+</details>
+
+<details>
+<summary>Kimlik bilgisi (credential) bulunamıyor</summary>
+
+n8n, API anahtarlarını "Credentials" (kimlik bilgileri) bölümünde şifreleyerek saklar. Bir düğüm hata veriyorsa: Settings → Credentials → İlgili servisi bulun, API anahtarını güncelleyin.
+
+</details>
+
+<details>
+<summary>İş akışı büyük veri setinde bellek hatası</summary>
+
+```javascript
+// "Split In Batches" düğümü kullanarak büyük veriyi böl
+// Batch Size: 10-50 arası ayarla
+// "Wait" düğümü ile API rate limit'e uymak için bekleme ekle
+```
+
+</details>
+
+<details>
+<summary>Docker container yeniden başladığında iş akışları kayboluyor</summary>
+
+`-v ~/.n8n:/home/node/.n8n` volume mount'ını doğru ayarladığınızdan emin olun. Veriler bu klasörde saklanır.
+
+</details>
+
+## Maliyet / limit
+
+- **Self-host:** Tamamen ücretsiz. Yalnızca sunucu maliyeti (DigitalOcean/Hetzner $5-10/ay ile başlar).
+- **n8n Cloud — Starter:** Aylık sabit ücretle sınırlı iş akışı ve yürütme sayısı.
+- **n8n Cloud — Pro/Enterprise:** Sınırsız iş akışı, öncelikli destek, SSO.
+- **AI maliyeti:** n8n üzerinden yapılan LLM çağrıları (OpenAI, Anthropic) kendi API anahtarınızla olur; maliyeti direkt API kullanımıyla aynıdır.
+
+<Callout type="info">
+Self-host için önerilen başlangıç: 2 CPU / 2 GB RAM sunucu. Küçük ekipler ve bireysel kullanıcılar için $5-10/ay maliyetle tam özellikli n8n kurulumu mümkündür.
+</Callout>
+
+## Karşılaştırma
+
+[n8n vs Make vs Zapier](/karsilastirmalar/n8n-vs-make-vs-zapier)
+
+[Hangi araç ne zaman?](/karsilastirmalar/hangi-arac-ne-zaman)
+
+## Daha fazla
+
+- [n8n resmi dokümantasyonu](https://docs.n8n.io) — n8n
+- [n8n topluluk forumu](https://community.n8n.io) — Topluluk
+- [n8n şablon kütüphanesi](https://n8n.io/workflows) — Hazır iş akışları
+- [n8n GitHub](https://github.com/n8n-io/n8n) — Açık kaynak
+- [Make](/araclar/make) — Bulut tabanlı alternatif
+- [Zapier](/araclar/zapier) — En kolay alternatif

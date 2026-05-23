@@ -1,0 +1,32 @@
+---
+// src/pages/kavramlar/[...slug].astro
+
+import DocLayout from '@layouts/DocLayout.astro';
+import Callout from '@components/mdx/Callout.astro';
+import { getCollection } from 'astro:content';
+
+export async function getStaticPaths() {
+  const entries = await getCollection('kavramlar', (e) => !e.data.draft);
+  return entries.map((entry) => ({
+    params: { slug: entry.slug },
+    props: { entry },
+  }));
+}
+
+const { entry } = Astro.props;
+const { Content, headings } = await entry.render();
+---
+
+<DocLayout
+  title={entry.data.title}
+  description={entry.data.summary}
+  headings={headings}
+  frontmatter={entry.data}
+  breadcrumbs={[
+    { label: 'Kavramlar', href: '/kavramlar' },
+    { label: entry.data.title },
+  ]}
+  section="Kavramlar"
+>
+  <Content components={{ Callout }} />
+</DocLayout>

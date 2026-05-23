@@ -1,0 +1,32 @@
+---
+// src/pages/workflow/[...slug].astro
+
+import DocLayout from '@layouts/DocLayout.astro';
+import Callout from '@components/mdx/Callout.astro';
+import { getCollection } from 'astro:content';
+
+export async function getStaticPaths() {
+  const entries = await getCollection('workflow', (e) => !e.data.draft);
+  return entries.map((entry) => ({
+    params: { slug: entry.slug },
+    props: { entry },
+  }));
+}
+
+const { entry } = Astro.props;
+const { Content, headings } = await entry.render();
+---
+
+<DocLayout
+  title={entry.data.title}
+  description={entry.data.summary}
+  headings={headings}
+  frontmatter={entry.data}
+  breadcrumbs={[
+    { label: 'Workflow', href: '/workflow' },
+    { label: entry.data.title },
+  ]}
+  section="Workflow"
+>
+  <Content components={{ Callout }} />
+</DocLayout>

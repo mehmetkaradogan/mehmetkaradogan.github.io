@@ -1,0 +1,126 @@
+---
+// src/layouts/DocLayout.astro
+// Content-page shell: Breadcrumb, prose article, right ToC, PrevNext, UpdatedBadge.
+
+import BaseLayout from '@layouts/BaseLayout.astro';
+import Breadcrumb from '@components/Breadcrumb.astro';
+import Toc from '@components/Toc.astro';
+import PrevNext from '@components/PrevNext.astro';
+import UpdatedBadge from '@components/UpdatedBadge.astro';
+
+export interface Heading {
+  depth: number;
+  slug: string;
+  text: string;
+}
+
+export interface NavEntry {
+  title: string;
+  href: string;
+}
+
+export interface BreadcrumbItem {
+  label: string;
+  href?: string;
+}
+
+export interface Props {
+  title: string;
+  description: string;
+  ogImage?: string;
+  headings?: Heading[];
+  frontmatter?: Record<string, unknown>;
+  prev?: NavEntry;
+  next?: NavEntry;
+  breadcrumbs?: BreadcrumbItem[];
+  /** For Article JSON-LD: collection name (used as section label) */
+  section?: string;
+  /** HowTo mode for modul pages */
+  howTo?: boolean;
+}
+
+const {
+  title,
+  description,
+  ogImage,
+  headings = [],
+  frontmatter = {},
+  prev,
+  next,
+  breadcrumbs = [],
+  section,
+  howTo = false,
+} = Astro.props;
+
+const updated = frontmatter['updated'] instanceof Date ? frontmatter['updated'] as Date : undefined;
+const SITE_URL = 'https://agenticai.tr';
+const canonicalUrl = `${SITE_URL}${Astro.url.pathname}`;
+
+// Article JSON-LD
+const articleJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': howTo ? 'HowTo' : 'Article',
+  headline: title,
+  description,
+  url: canonicalUrl,
+  ...(updated ? { dateModified: updated.toISOString() } : {}),
+  ...(section ? { articleSection: section } : {}),
+  inLanguage: 'tr',
+  publisher: {
+    '@type': 'Organization',
+    name: 'Agentic AI Öğrenme Merkezi',
+    url: SITE_URL,
+  },
+};
+---
+
+<BaseLayout title={title} description={description} {...(ogImage !== undefined ? { ogImage } : {})}>
+  <!-- JSON-LD (inline in body — schema.org allows this) -->
+  <script is:inline type="application/ld+json" set:html={JSON.stringify(articleJsonLd)} />
+
+  <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
+    <div class="flex gap-8 items-start">
+      <!-- Main content column -->
+      <div class="flex-1 min-w-0">
+        <!-- Breadcrumb -->
+        {breadcrumbs.length > 0 && <Breadcrumb crumbs={breadcrumbs} />}
+
+        <!-- Updated badge -->
+        {updated && (
+          <div class="mb-6">
+            <UpdatedBadge updated={updated} />
+          </div>
+        )}
+
+        <!-- Prose article -->
+        <article
+          class="prose prose-neutral dark:prose-invert max-w-none
+                 prose-headings:scroll-mt-24
+                 prose-a:text-indigo-600 dark:prose-a:text-indigo-400
+                 prose-code:text-indigo-600 dark:prose-code:text-indigo-400
+                 prose-pre:p-0 prose-pre:bg-transparent"
+        >
+          <slot />
+        </article>
+
+        <!-- Prev/Next navigation -->
+        <PrevNext {...(prev !== undefined ? { prev } : {})} {...(next !== undefined ? { next } : {})} />
+      </div>
+
+      <!-- Right-hand ToC (only on xl+) -->
+      {headings.length > 1 && (
+        <aside
+          class="hidden xl:block w-56 shrink-0 sticky top-24 self-start"
+          aria-label="İçindekiler"
+        >
+          <div
+            class="rounded-xl p-4 text-sm"
+            style="background-color: var(--bg-subtle); border: 1px solid var(--border-color);"
+          >
+            <Toc headings={headings} />
+          </div>
+        </aside>
+      )}
+    </div>
+  </div>
+</BaseLayout>

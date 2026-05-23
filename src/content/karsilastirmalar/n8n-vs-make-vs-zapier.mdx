@@ -1,0 +1,138 @@
+---
+title: "n8n vs Make vs Zapier: Otomasyon Platformları Karşılaştırması"
+slug: n8n-vs-make-vs-zapier
+category: karsilastirmalar
+level: orta
+summary: "n8n, Make ve Zapier'i fiyat, teknik esneklik, AI entegrasyonu ve kullanım senaryoları açısından karşılaştıran karar rehberi. Self-host, cloud ve no-code tercihlerinize göre doğru platformu seçin."
+updated: 2026-05-23
+tags: [n8n, make, zapier, otomasyon, no-code, workflow, karsilastirma, entegrasyon]
+related: [framework-secim-rehberi, anti-patternler, ornekler]
+tools: ["n8n", "make", "zapier"]
+---
+
+## Kime Hangisi?
+
+Otomasyon platformları seçimi çoğunlukla teknik beceri, veri kontrolü ve bütçe üçgeninde şekillenir:
+
+- **n8n** → Teknik ekip, veri gizliliği kritik, self-host şart, özel node yazmak istiyorsunuz, AI agent entegrasyonu önceliğiniz.
+- **Make (eski adı Integromat)** → Görsel senaryo mantığını seviyor, orta karmaşıklıkta iş akışları kuruyorsunuz, cloud yeterli, maliyet dengesini önemsiyorsunuz.
+- **Zapier** → No-code kullanıcı, hız öncelikli, 7000+ uygulama kataloğu gerekiyor, teknik bilgi minimum.
+
+<Callout type="not">
+Bu üç platform birbirini doğrudan ikame etmez. Çoğu olgun organizasyon ikisini birden kullanır: Zapier basit departman otomasyonları için, n8n veri yoğun veya AI entegre iş akışları için.
+</Callout>
+
+---
+
+## Büyük Karşılaştırma Tablosu
+
+| Boyut | n8n | Make | Zapier |
+|---|---|---|---|
+| **Otonomi seviyesi** | Yüksek; özel node, webhook, kod bloğu | Orta; görsel + kod modülleri | Düşük; kurallar ve filtreler |
+| **Self-host** | Evet; Docker, Kubernetes, npm | Hayır (cloud only) | Hayır (cloud only) |
+| **Arayüz** | Görsel akış editörü + JSON | Görsel senaryo editörü | Adım sihirbazı (wizard) |
+| **Öğrenme eğrisi** | Orta-dik; node kavramı, expression'lar | Düz-orta; senaryo ve modül mantığı | Çok düşük; "Zap" sihirbazı |
+| **Fiyat modeli** | Self-host ücretsiz; cloud ücretli | İşlem (operation) başı; ücretsiz kademe sınırlı | Görev (task) başı; ücretsiz kademe kısıtlı |
+| **AI / LLM entegrasyonu** | Yerleşik AI Agent node; OpenAI, Anthropic, Ollama | AI modülleri mevcut; sınırlı | Zapier AI (beta); temel GPT entegrasyonu |
+| **MCP desteği** | Topluluk node'ları ile mümkün | Yok | Yok |
+| **Entegrasyon sayısı** | 400+ native; HTTP ile sınırsız | 1000+ | 7000+ |
+| **Veri gizliliği** | Self-host = tam kontrol | Avrupa veri merkezleri mevcut | ABD merkezli; GDPR uyumu belgelenmiş |
+| **Hata ayıklama (debugging)** | Çalışma geçmişi; node bazlı inceleme | Yürütme geçmişi; senaryo bazlı | Görev geçmişi; temel |
+| **Kod yazma imkanı** | JavaScript/Python kod node'u | Evet; fonksiyon modülü | Hayır (Code by Zapier beta) |
+| **Topluluk** | Aktif; açık kaynak katkı | Orta büyüklükte | Büyük; geniş şablon kütüphanesi |
+| **Üretim olgunluğu** | Yüksek; kurumsal kullanım yaygın | Yüksek; güvenilir cloud | Yüksek; en olgun platform |
+| **Deployment** | Self-host veya n8n cloud | n8n cloud | Zapier cloud |
+
+---
+
+## 3 Mini Vaka Çalışması
+
+### Vaka 1: SaaS Startup — GDPR Uyumlu Müşteri Veri Pipeline'ı
+
+Avrupalı bir SaaS startup'ı, müşteri verilerini Salesforce, HubSpot ve kendi PostgreSQL veritabanı arasında senkronize etmek istiyor. Veri Avrupa'dan çıkmamalı, özel dönüşüm mantığı yazılabilmeli.
+
+**Seçim: n8n (self-host)**
+
+Docker ile kendi sunucularında çalışan n8n, verinin hiçbir üçüncü taraf cloud'una gitmediğini garantiler. JavaScript kod node'u ile karmaşık veri dönüşümleri mümkündür. Webhook node ile Salesforce event'larını gerçek zamanlı dinler.
+
+```json
+{
+  "nodes": [
+    {
+      "name": "Salesforce Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "parameters": { "path": "salesforce-event" }
+    },
+    {
+      "name": "Veriyi Dönüştür",
+      "type": "n8n-nodes-base.code",
+      "parameters": {
+        "jsCode": "// Salesforce formatından iç formata dönüştür\nconst musteri = items[0].json;\nreturn [{\n  json: {\n    id: musteri.Id,\n    email: musteri.Email,\n    updated: new Date().toISOString()\n  }\n}];"
+      }
+    },
+    {
+      "name": "PostgreSQL Kaydet",
+      "type": "n8n-nodes-base.postgres",
+      "parameters": { "operation": "upsert", "table": "musteriler" }
+    }
+  ]
+}
+```
+
+---
+
+### Vaka 2: Pazarlama Ajansı — İçerik Onay İş Akışı
+
+Orta büyüklükte bir pazarlama ajansı, içerik üretimini otomatize etmek istiyor: sosyal medya paylaşımı hazırla, müşteri onayına gönder, onaylanınca yayınla. Görsel iş akışı önemli, teknik ekip yok, maliyet orta.
+
+**Seçim: Make**
+
+Make'in görsel senaryo editörü, ajans direktörlerinin teknik olmadan iş akışını anlamasını sağlar. Router modülü onay durumuna göre dallanmayı kolaylaştırır. Gmail + Google Sheets + Buffer entegrasyonları 15 dakikada kurulur.
+
+Make senaryosu (görsel adımlar):
+
+1. Google Sheets'te yeni satır tetikler
+2. Yapay zeka modülü taslak içerik üretir
+3. Gmail ile müşteriye onay maili gönderir
+4. Müşteri formu doldurur → Make webhook alır
+5. Router: onaylandı → Buffer'a zamanla; reddedildi → Slack'te uyar
+
+---
+
+### Vaka 3: E-ticaret — 7000 Uygulama Entegrasyonu
+
+Küçük bir e-ticaret işletmesi, Shopify + Mailchimp + Slack + QuickBooks arasında rutin veri akışı kurmak istiyor. Teknik ekip yok, hız kritik, entegrasyon sayısı öncelikli.
+
+**Seçim: Zapier**
+
+7000+ uygulama kataloğuyla Zapier bu dört uygulamayı anında bağlar. "Zap" sihirbazı teknik bilgi gerektirmez; "Shopify'da yeni sipariş → Mailchimp'e ekle → Slack'e bildir → QuickBooks'ta fatura oluştur" akışı 30 dakikada aktif olur.
+
+<Callout type="ipucu">
+Zapier'in görev (task) sayısı arttıkça fatura da artar. 1000 görev/ay üzerinde Make genellikle daha uygun maliyetlidir; 10.000 görev/ay üzerinde n8n self-host en ucuz seçenektir.
+</Callout>
+
+---
+
+## Yanlış Seçimin Maliyeti
+
+**Maliyet tuzağı:** Zapier ile başlayıp ölçeklendikçe aylık görev sayısı hızla artar. 50.000 görev/ay seviyesinde Zapier maliyeti, n8n self-host sunucu maliyetinin 10-20 katına çıkabilir. Büyüme projeksiyonunu baştan yapın.
+
+**Veri gizliliği gözetimi:** Hassas müşteri verisini cloud tabanlı platformlardan geçirmek, GDPR ve yerel veri düzenlemeleri kapsamında risk yaratabilir. Self-host gereksinimi varsa Zapier ve Make seçilmemelidir.
+
+**Karmaşıklık uyumsuzluğu:** n8n'de çok basit bir "e-posta al → Slack'te bildir" iş akışı için node bağlantısı, expression yazımı ve test döngüsü Zapier'e göre 5-10 kat fazla zaman alır. Düşük karmaşıklıklı iş akışları için fazla mühendislik yapmayın.
+
+**AI entegrasyon boşluğu:** Otomasyon platformlarını AI agent olarak kullanmak istiyorsanız n8n'in yerleşik AI Agent node'u diğerlerine kıyasla çok daha gelişmiştir. Zapier ve Make'de LLM entegrasyonu mümkün ama sınırlı; karmaşık agentic senaryolar için [LangGraph](/araclar/langgraph) veya [CrewAI](/araclar/crewai) gibi framework'leri düşünün. Bkz. [Anti-Patternler](/workflow/anti-patternler).
+
+<Callout type="uyari">
+n8n self-host, ücretsiz gibi görünse de sunucu yönetimi, güncelleme, yedekleme ve güvenlik yamalarını siz üstlenir. Operasyonel maliyet gerçek bir mühendislik zamanı gerektirir.
+</Callout>
+
+---
+
+## İlgili Araçlar
+
+- [n8n](/araclar/n8n) — Self-host otomasyon platformu
+- [Make](/araclar/make) — Görsel senaryo tabanlı otomasyon
+- [Zapier](/araclar/zapier) — No-code en geniş entegrasyon kataloğu
+- [Workflow Örnekleri](/workflow/ornekler) — Gerçek iş akışı örnekleri
+- [Framework Seçim Rehberi](/karsilastirmalar/framework-secim-rehberi) — Daha geniş araç seçim rehberi

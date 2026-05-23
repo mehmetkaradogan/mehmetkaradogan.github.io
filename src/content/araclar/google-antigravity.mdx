@@ -1,0 +1,231 @@
+---
+title: "Google Antigravity"
+slug: google-antigravity
+category: araclar
+level: orta
+summary: "Google'ın Kasım 2025'te çıkardığı, Gemini 3 Pro tabanlı agentic IDE ve agent orchestration platformu; browser kontrolü, Plan Mode ve yerleşik bilgi tabanıyla öne çıkar."
+updated: 2026-05-23
+tags: ["agentic-ide", "google", "gemini", "browser-control"]
+related: ["claude-code", "openai-codex", "cursor"]
+vendor: "Google"
+toolType: "agentic-ide"
+license: "Proprietary (bireyler için ücretsiz public preview)"
+os: ["macOS", "Linux", "Windows"]
+primary_model: "Gemini 3 Pro"
+last_review: 2026-05-23
+status: "active"
+---
+
+## Nedir?
+
+Google Antigravity, Google'ın Kasım 2025'te piyasaya sürdüğü ve Mayıs 2026'da 2.0 sürümüyle bağımsız bir agent orchestration masaüstü uygulamasına genişlediği agentic IDE'dir (agentic integrated development environment). VS Code çatalı (fork) tabanlı bir kod düzenleyici, ayrı bir Agent Manager uygulaması, CLI ve SDK'dan oluşur. Gemini 3 Pro modeliyle güçlenen Antigravity; Plan Mode ve Fast Mode arasında geçiş yapabilir, web tarayıcısını kontrol edebilir, terminal çalıştırabilir ve Artifacts panelinde çıktıları yönetebilir. Agent'ın öğrendiklerini kalıcı bilgi tabanına (knowledge base) geri yazan bu yerleşik bellek özelliği, oturumlar arası öğrenmeyi (cross-session learning) mümkün kılar. Gemini CLI'nın resmi halefidir.
+
+<Callout type="info">
+Antigravity 2.0 (Mayıs 2026), eski Gemini CLI kullanıcıları için migration gerektirir. Bkz. resmi geçiş kılavuzu.
+</Callout>
+
+## Ne için iyi
+
+- Gemini ekosistemi içinde IDE entegrasyonu — Gemini 3 Pro'nun en iyi performansını doğrudan düzenleyicide kullanma.
+- Tarayıcı kontrolü (browser control) gerektiren görevler: web araştırması, form doldurma, ekran kazıma (scraping).
+- Plan Mode ile karmaşık, çok adımlı görevlerin adım adım onaylanarak yürütülmesi.
+- Yerleşik bilgi tabanı sayesinde proje bağlamının oturumlar arası korunması.
+- Bireysel geliştiriciler için ücretsiz erişim (public preview kapsamında).
+- Artifact paneli ile kod, belge ve görsel çıktıların organize edilmesi.
+- Agent Teams — paralel worker agent'ların yönetimi için Agent Manager arayüzü.
+
+## Ne için kötü
+
+- Anthropic veya OpenAI ekosistemiyle sıkı entegrasyon gerektiren projeler.
+- Tamamen terminal tabanlı, GUI gerektirmeyen CI/CD iş akışları.
+- Claude Code kadar derin MCP ekosistem desteği henüz mevcut değil.
+- Public preview aşamasında olduğundan üretim (production) kritik ortamlar için kararlılık riski taşıyabilir.
+- Çok büyük mono-repo'larda Claude Code'un 1M token bağlam penceresine henüz ulaşamıyor.
+
+## Kurulum
+
+```bash
+# Antigravity CLI kurulumu
+npm install -g @google/antigravity-cli
+
+# Antigravity CLI ile oturum açma
+antigravity login
+
+# Sürümü doğrula
+antigravity --version
+
+# Masaüstü uygulaması (Agent Manager dahil) için
+# https://antigravity.google.dev adresinden platform bazlı yükleyici indir
+```
+
+<Callout type="ipucu">
+VS Code uzantısı olarak da yüklenebilir: VS Code Market'te "Google Antigravity" uzantısını arayın. Bu yöntem mevcut VS Code kurulumunuzu korur.
+</Callout>
+
+## İlk çalıştırma
+
+```bash
+# Bir proje dizininde Antigravity başlat
+cd ~/projelerim/benim-proje
+antigravity start
+
+# Plan Mode'da ilk görev (onay bekler)
+> /plan Projedeki tüm bağımlılıkları güncelle, uyumsuzlukları raporla.
+
+# Antigravity adımları listeler ve onay ister:
+# Adım 1: package.json oku
+# Adım 2: Her bağımlılığın son sürümünü kontrol et
+# Adım 3: Uyumsuzluk raporu oluştur
+# Devam edilsin mi? [e/h]:
+```
+
+Fast Mode'da onay beklenmeden hızlıca çalıştırılabilir:
+
+```bash
+> /fast Projedeki tüm TODO yorumlarını listele.
+```
+
+## Senaryolar
+
+### 1) Browser Control ile Web Araştırması
+
+```python
+# Antigravity SDK kullanımı
+from antigravity import Agent, BrowserTool, ArtifactPanel
+
+agent = Agent(
+    model="gemini-3-pro",
+    tools=[BrowserTool()],
+    knowledge_base=True  # Oturumlar arası bellek
+)
+
+result = agent.run(
+    "FastAPI'nin son 3 sürümünün kırılma değişikliklerini (breaking change) "
+    "resmi changelog'dan oku ve karşılaştırma tablosu oluştur."
+)
+# Sonuç otomatik olarak Artifacts panelinde görünür
+```
+
+### 2) Plan Mode ile Güvenli Kod Dönüşümü
+
+```bash
+# Antigravity Plan Mode — her adımda onay
+antigravity plan "Python 3.9 sözdizimini Python 3.12'ye yükselt: \
+match-case, f-string geliştirmeleri, tip ipuçları (type hint) ekle."
+
+# Çıktı:
+# Plan oluşturuluyor...
+# [1/5] src/ dizinini tara ve Python 3.9 özgü sözdizimi bul
+# [2/5] Güvenli dönüşümler için libcst kullan
+# [3/5] Tip ipuçlarını mypy ile doğrula
+# [4/5] Testleri çalıştır
+# [5/5] Değişiklik özetini Artifacts'a kaydet
+# Planı onayla ve başlat? [e/h]: e
+```
+
+### 3) Bilgi Tabanıyla Oturumlar Arası Öğrenme
+
+```python
+# Agent öğrendiklerini bilgi tabanına yazar
+from antigravity import Agent, KnowledgeBase
+
+kb = KnowledgeBase(project="eticaret-api")
+agent = Agent(model="gemini-3-pro", knowledge_base=kb)
+
+# İlk oturumda öğrenilen mimari kararlar
+agent.run("Projemizin cache stratejisini analiz et.")
+# Agent: "Redis ile 2 katmanlı cache kullanıyorsunuz, bunu hatırlıyorum."
+
+# Sonraki oturumda bağlam korunur
+agent.run("Cache'i PostgreSQL materyalize görünüm (materialized view) ile karşılaştır.")
+# Agent: "Önceki analizimde Redis'in 2 katmanlı yapısını incelemiştik..."
+```
+
+## Diğer araçlarla
+
+**AI Studio ile:** Google AI Studio'ya doğrudan bağlanarak modelleri karşılaştırabilir, promtları test edebilir ve Antigravity ajanlarını AI Studio'dan yönetebilirsiniz.
+
+**Claude Sonnet 4.5 ve GPT-OSS ile:** Antigravity, Gemini 3 Pro dışında Claude Sonnet 4.5 ve açık kaynak GPT modellerini de destekler. Model seçimi ajan bazında yapılabilir.
+
+**Agent Manager uygulamasıyla:** Antigravity 2.0 ile gelen Agent Manager, birden fazla ajanı görsel arayüzde yönetir — [çoklu ajan sistemleri](/kavramlar/multi-agent-systems) için görsel orkestrasyon sağlar.
+
+**GitHub ile:** Antigravity, GitHub repo'larını doğrudan açabilir, PR oluşturabilir ve code review yapabilir.
+
+**MCP protokolüyle:** Sınırlı MCP desteği mevcuttur; ekosistem Claude Code kadar geniş değil ancak aktif olarak genişletiliyor. Bkz. [MCP protokolü](/kavramlar/mcp-protokol).
+
+## Yaygın hatalar ve çözümleri
+
+<details>
+<summary>Gemini CLI komutları çalışmıyor (eski kullanıcılar için)</summary>
+
+Antigravity, Gemini CLI'nın resmi halefidir. Eski `gemini` komutları artık çalışmaz:
+
+```bash
+# Eski (artık geçersiz)
+gemini "kodu analiz et"
+
+# Yeni
+antigravity "kodu analiz et"
+# veya Plan Mode'da
+antigravity plan "kodu analiz et"
+```
+
+</details>
+
+<details>
+<summary>Browser control izin hatası</summary>
+
+Browser control özelliği sistem izni gerektirir. macOS'ta Sistem Ayarları > Gizlilik > Erişilebilirlik bölümünden Antigravity'e izin verin. Windows'ta UAC onayı gerekebilir.
+
+</details>
+
+<details>
+<summary>Bilgi tabanı senkronizasyon sorunu</summary>
+
+```bash
+# Bilgi tabanını yeniden oluştur
+antigravity kb rebuild --project ./
+
+# Bozuk önbelleği temizle
+antigravity cache clear
+```
+
+</details>
+
+<details>
+<summary>Plan Mode sonsuza takılıyor</summary>
+
+Plan Mode çok büyük görevlerde ilerleme kaydedemiyor olabilir. Görevi daha küçük alt görevlere bölün:
+
+```bash
+# Büyük görevi parçala
+antigravity plan "Sadece /src/api dizinindeki dosyalara odaklan."
+```
+
+</details>
+
+## Maliyet / limit
+
+<Callout type="info">
+Bireysel kullanıcılar için ücretsiz public preview kapsamında. Ticari ve takım kullanımı için fiyatlandırma Google Cloud anlaşmalarına bağlıdır.
+</Callout>
+
+- **Ücretsiz katman:** Public preview kapsamında bireyler için sınırlı Gemini 3 Pro kullanımı ücretsiz.
+- **Gemini 3 Pro maliyeti:** Üretim veya yüksek hacimli kullanımda Google Cloud API fiyatlandırması geçerli olur.
+- **Alternatif model tasarrufu:** Hafif görevler için Claude Sonnet 4.5 veya açık kaynak modeller seçilerek maliyet düşürülebilir.
+- **Bilgi tabanı depolama:** Büyük projelerde bilgi tabanı boyutu artabilir; periyodik temizlik önerilir.
+- **Agent Manager paralel ajanlar:** Aynı anda çalışan her ajan ayrı model çağrısı üretir. Bkz. [maliyet yönetimi](/kavramlar/agent-orchestration).
+
+## Karşılaştırma
+
+[Claude Code vs Codex vs Antigravity](/karsilastirmalar/claude-code-vs-codex-vs-antigravity)
+
+[Hangi araç ne zaman?](/karsilastirmalar/hangi-arac-ne-zaman)
+
+## Daha fazla
+
+- [Google Antigravity resmi sitesi](https://antigravity.google.dev) — Google
+- [Antigravity SDK dokümantasyonu](https://developers.google.com/antigravity) — Google Developers
+- [Gemini CLI'dan Antigravity'e geçiş kılavuzu](https://developers.google.com/antigravity/migration) — Google Developers
+- [Modül 08: Antigravity ile Build](/modul/08-antigravity-ile-build) — Bu sitede
+- [Browser control kavramı](/kavramlar/tool-use) — Bu sitede

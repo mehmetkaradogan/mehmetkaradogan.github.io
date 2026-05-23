@@ -1,0 +1,266 @@
+---
+title: "Başlangıç Projeleri"
+slug: baslangic
+category: projeler
+seviye: baslangic
+level: giris
+summary: "Agentic AI öğrenimini pekiştirmek için dört başlangıç seviyesi proje: Obsidian özetleyici, RSS bülten ajanı, GitHub issue triage botu ve PDF soru-cevap ajanı."
+updated: 2026-05-23
+tags: [proje, baslangic, rag, tool-use, otomasyon]
+related: [01-temeller, 02-ilk-tool-calling, 03-rag-kurulumu]
+---
+
+## Başlangıç Seviyesi Projeler
+
+Bu sayfadaki projeler Modül 01-03'ü tamamlamış kişiler için tasarlanmıştır. Her proje tek bir agent ve sınırlı sayıda araçla tamamlanabilir. Tahmini süre: 2-8 saat.
+
+---
+
+## Proje 1 — Obsidian Vault Günlük Özetleyici
+
+**Amaç:** Obsidian vault'undaki son 7 günde değiştirilen notları okuyup günlük özet raporu üreten bir agent.
+
+**Kullanılan Araçlar:**
+- [Anthropic SDK](/araclar/claude-code) — LLM çağrıları
+- Python `pathlib` — dosya okuma
+- `python-dotenv` — ortam değişkenleri
+
+**Adımlar:**
+
+1. Vault dizinindeki `.md` dosyalarını tara ve son 7 günde değişenleri filtrele.
+2. Her notu al ve token limitini aşmamak için parçalara böl.
+3. Her parça için Claude'a "Bu notun ana fikirlerini 3 madde olarak özetle" yönergesi ver.
+4. Tüm özetleri birleştirip `haftalik_ozet.md` dosyasına yaz.
+5. (İsteğe bağlı) E-posta veya Slack'e gönder.
+
+**Zorluk:** Kolay
+
+**Genişletme Fikirleri:**
+- Konuya göre notları grupla (etiket/klasör bazlı)
+- Notlar arasındaki bağlantıları (wikilink) tespit et ve bilgi grafiği çıkar
+- Obsidian MCP sunucusunu entegre et
+
+**Başlangıç Kodu:**
+
+```python
+from pathlib import Path
+from datetime import datetime, timedelta
+import anthropic
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+
+VAULT_YOLU = Path("C:/Users/kullanici/ObsidianVault")
+SON_GUN = 7
+
+def son_notlari_al():
+    sinir = datetime.now() - timedelta(days=SON_GUN)
+    notlar = []
+    for dosya in VAULT_YOLU.rglob("*.md"):
+        degisim = datetime.fromtimestamp(dosya.stat().st_mtime)
+        if degisim > sinir:
+            notlar.append((dosya.name, dosya.read_text(encoding="utf-8")))
+    return notlar
+
+def not_ozetle(baslik: str, icerik: str) -> str:
+    yanit = client.messages.create(
+        model="claude-haiku-4-5",
+        max_tokens=256,
+        messages=[{
+            "role": "user",
+            "content": f"Bu notun ana fikirlerini 3 madde olarak Türkçe özetle:\n\nBaşlık: {baslik}\n\n{icerik[:2000]}"
+        }]
+    )
+    return yanit.content[0].text
+
+def rapor_olustur():
+    notlar = son_notlari_al()
+    satirlar = [f"# Haftalık Özet — {datetime.now().strftime('%d %B %Y')}\n"]
+    for baslik, icerik in notlar:
+        ozet = not_ozetle(baslik, icerik)
+        satirlar.append(f"## {baslik}\n{ozet}\n")
+    rapor = "\n".join(satirlar)
+    Path("haftalik_ozet.md").write_text(rapor, encoding="utf-8")
+    print(f"{len(notlar)} not özetlendi.")
+
+rapor_olustur()
+```
+
+---
+
+## Proje 2 — RSS Haftalık Bülten Üreticisi
+
+**Amaç:** Belirtilen RSS beslemelerini her hafta otomatik okuyup ilgili haberleri seçen ve kişiselleştirilmiş bülten üreten agent.
+
+**Kullanılan Araçlar:**
+- `feedparser` — RSS okuma
+- [Anthropic SDK](/araclar/claude-code) — özetleme ve seçim
+- `smtplib` — e-posta gönderimi (isteğe bağlı)
+
+**Adımlar:**
+
+1. `feedparser` ile RSS beslemelerini çek.
+2. Son 7 günün makalelerini filtrele.
+3. Her makale için Claude'a: "Bu makale agentic AI ile ilgili mi? (evet/hayır) Evetse bir paragraf özetle." yap.
+4. İlgili makaleleri seç ve Markdown formatında bülten oluştur.
+5. Bülteni dosyaya kaydet veya e-postayla gönder.
+
+**Zorluk:** Kolay
+
+**Genişletme Fikirleri:**
+- Farklı ilgi alanları için farklı bültenler oluştur
+- Makale önem puanı ekle (yüksek-orta-düşük)
+- Birden fazla dili destekle
+
+```python
+import feedparser
+from datetime import datetime, timedelta, timezone
+import anthropic, os
+from dotenv import load_dotenv
+
+load_dotenv()
+client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+
+RSS_BESLEMELER = [
+    "https://www.anthropic.com/rss.xml",
+    "https://openai.com/news/rss",
+    "https://blog.langchain.dev/rss/",
+]
+KONU = "agentic AI, LLM, agent çerçeveleri"
+
+def haber_ilgili_mi_ve_ozetle(baslik: str, ozet: str) -> dict:
+    yanit = client.messages.create(
+        model="claude-haiku-4-5",
+        max_tokens=200,
+        system=f"Sen {KONU} konularıyla ilgilenen bir editörsün.",
+        messages=[{"role": "user", "content":
+            f"Bu makale konu alanımla ilgili mi? Evetse, Türkçe 2 cümle özetle. "
+            f"'İlgili: evet/hayır | Özet: ...' formatında yaz.\n\nBaşlık: {baslik}\nÖzet: {ozet}"
+        }]
+    )
+    metin = yanit.content[0].text
+    return {"ilgili": "evet" in metin.lower(), "ozet": metin}
+
+def bulten_olustur():
+    sinir = datetime.now(timezone.utc) - timedelta(days=7)
+    secilen = []
+    for url in RSS_BESLEMELER:
+        besleme = feedparser.parse(url)
+        for makale in besleme.entries[:20]:
+            tarih = datetime(*makale.published_parsed[:6], tzinfo=timezone.utc) if hasattr(makale, "published_parsed") and makale.published_parsed else None
+            if tarih and tarih < sinir:
+                continue
+            sonuc = haber_ilgili_mi_ve_ozetle(
+                makale.get("title", ""),
+                makale.get("summary", "")[:500]
+            )
+            if sonuc["ilgili"]:
+                secilen.append({"baslik": makale.title, "link": makale.link, "ozet": sonuc["ozet"]})
+
+    satirlar = [f"# Haftalık Bülten — {datetime.now().strftime('%d %B %Y')}\n"]
+    for m in secilen:
+        satirlar.append(f"## [{m['baslik']}]({m['link']})\n{m['ozet']}\n")
+    Path("bulten.md").write_text("\n".join(satirlar), encoding="utf-8")
+    print(f"{len(secilen)} makale seçildi.")
+
+bulten_olustur()
+```
+
+---
+
+## Proje 3 — GitHub Issue Triage Botu
+
+**Amaç:** GitHub deposundaki açık issue'ları okuyup öncelik etiketi (critical/high/medium/low) öneren ve etiketleri otomatik atayan agent.
+
+**Kullanılan Araçlar:**
+- [GitHub MCP Sunucusu](/entegrasyonlar/github) veya `PyGithub`
+- [Anthropic SDK](/araclar/claude-code)
+
+**Adımlar:**
+
+1. `PyGithub` ile deponun açık issue'larını çek.
+2. Her issue için başlık + açıklama + yorum sayısı al.
+3. Claude'a: "Bu issue'nun önceliğini belirle: critical/high/medium/low" yap.
+4. GitHub API ile etiket ata.
+5. Özet rapor üret: kaç issue hangi önceliğe atandı.
+
+**Zorluk:** Orta
+
+**Genişletme Fikirleri:**
+- İlgili issue'ları birbirine bağla
+- Yinelenen issue'ları tespit et
+- Milestone öner
+
+```python
+from github import Github
+import anthropic, os
+from dotenv import load_dotenv
+
+load_dotenv()
+client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+gh = Github(os.environ["GITHUB_TOKEN"])
+
+def oncelik_belirle(baslik: str, aciklama: str) -> str:
+    yanit = client.messages.create(
+        model="claude-haiku-4-5",
+        max_tokens=16,
+        system="Sadece şu kelimelerden birini yaz: critical | high | medium | low",
+        messages=[{"role": "user", "content":
+            f"Bu GitHub issue'sunun önceliğini belirle:\nBaşlık: {baslik}\nAçıklama: {aciklama[:500]}"
+        }]
+    )
+    return yanit.content[0].text.strip().lower()
+
+def triage(repo_adi: str):
+    repo = gh.get_repo(repo_adi)
+    sayac = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+    for issue in repo.get_issues(state="open"):
+        oncelik = oncelik_belirle(issue.title, issue.body or "")
+        try:
+            etiket = repo.get_label(oncelik)
+        except Exception:
+            etiket = repo.create_label(oncelik, "ff0000" if oncelik == "critical" else "ffa500")
+        issue.add_to_labels(etiket)
+        sayac[oncelik] += 1
+        print(f"#{issue.number} → {oncelik}")
+    print(f"\nÖzet: {sayac}")
+
+# triage("kullanici/depo-adi")
+```
+
+---
+
+## Proje 4 — PDF Soru-Cevap Agent'ı (Basit RAG)
+
+**Amaç:** Bir PDF setini indeksleyip kullanıcının sorularını bu belgelerden yanıtlayan konuşmalı agent.
+
+**Kullanılan Araçlar:**
+- `chromadb` — vektör veri tabanı
+- `pypdf` — PDF okuma
+- [Anthropic SDK](/araclar/claude-code)
+- [Modül 03 — RAG Kurulumu](/modul/03-rag-kurulumu)
+
+**Adımlar:**
+
+1. Bir klasördeki tüm PDF'leri yükle ve metne dönüştür.
+2. Metni parçalara (chunk) böl ve ChromaDB'ye ekle.
+3. Kullanıcı sorusu geldiğinde en alakalı 3 parçayı getir.
+4. Claude'a soru + ilgili parçaları vererek yanıt üret.
+5. Çok turlu konuşmayı destekle (mesaj geçmişi tut).
+
+**Zorluk:** Orta
+
+**Genişletme Fikirleri:**
+- Kaynak göster (hangi PDF'in hangi sayfasından)
+- Web arayüzü ekle (Streamlit veya Gradio)
+- Türkçe PDF desteği için özel embedding modeli seç
+
+<Callout type="ipucu">
+Başlamak için [Modül 03](/modul/03-rag-kurulumu)'teki tam kod tabanını kullanabilirsin. Bu projeyi oradan genişletmek yalnızca 1-2 saat alır.
+</Callout>
+
+---
+
+**Hazır mısın?** Bir sonraki seviyeye geç: [Orta Seviye Projeler](/projeler/orta)

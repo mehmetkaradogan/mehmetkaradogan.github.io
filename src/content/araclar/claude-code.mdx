@@ -1,0 +1,215 @@
+---
+title: "Claude Code"
+slug: claude-code
+category: araclar
+level: orta
+summary: "Anthropic'in terminal tabanlı agentic kodlama aracı; tüm kod tabanını okur, çok dosyalı değişiklikler yapar, testleri koşar ve commit atar."
+updated: 2026-05-23
+tags: ["agentic-cli", "anthropic", "kodlama", "terminal"]
+related: ["openai-codex", "google-antigravity", "claude-agent-sdk"]
+vendor: "Anthropic"
+toolType: "agentic-cli"
+license: "Proprietary (free tier var)"
+os: ["macOS", "Linux", "Windows"]
+primary_model: "Claude Sonnet 4.5 / Opus 4"
+last_review: 2026-05-23
+status: "active"
+---
+
+## Nedir?
+
+Claude Code, Anthropic tarafından geliştirilen, doğrudan terminal (uçbirim) içinde çalışan bir agentic kodlama aracıdır (agentic coding tool). Projenizin tüm kod tabanını bağlam penceresine (context window) alır; dosya okur, değiştirir, terminal komutları çalıştırır, testleri koşar ve git commit atar. Tek bir doğal dil talimatıyla çok adımlı kod görevlerini baştan sona tamamlayabilen otonom bir yazılım geliştirme ajanıdır.
+
+## Ne için iyi
+
+- Çok dosyalı yeniden yapılandırma (refactoring) görevleri — onlarca dosyayı tutarlı biçimde değiştirme.
+- Hata ayıklama (debugging) oturumları: hatayı tespit et, düzelt, testi geç, commit at.
+- Büyük kod tabanlarını anlama ve belgeleme (documentation) üretimi.
+- CI/CD boru hattına (pipeline) entegre otonom kod incelemesi (code review).
+- Alt-ajan (subagent) olarak daha büyük otomasyon iş akışlarına dahil edilme.
+- MCP sunucuları aracılığıyla GitHub, Slack, Postgres gibi harici servislerle etkileşim.
+- 1 milyon token bağlam penceresi sayesinde devasa mono-repo'larda çalışma.
+
+## Ne için kötü
+
+- Grafiksel arayüz (GUI) gerektiren görevler — Claude Code tamamen terminal tabanlıdır.
+- Görsel tasarım veya piksel düzeyinde UI incelemeleri.
+- Gerçek zamanlı web tarama gerektiren araştırma görevleri (varsayılan araç seti sınırlıdır).
+- Çok düşük bütçeli basit tek dosya düzenlemeleri — maliyeti hızla artabilir.
+- Windows kullanıcıları için WSL olmadan bazı özellikler sınırlı çalışır.
+
+## Kurulum
+
+```bash
+# Node.js 18+ gereklidir
+npm install -g @anthropic-ai/claude-code
+
+# Kurulumu doğrula
+claude --version
+
+# API anahtarını ayarla (ANTHROPIC_API_KEY ortam değişkeni)
+export ANTHROPIC_API_KEY="sk-ant-..."
+```
+
+<Callout type="ipucu">
+Windows kullanıcıları için WSL 2 (Windows Subsystem for Linux) üzerinden kurulum önerilir. PowerShell desteği mevcuttur ancak WSL daha kararlı çalışır.
+</Callout>
+
+## İlk çalıştırma
+
+```bash
+# Bir proje dizinine gir
+cd ~/projelerim/benim-uygulama
+
+# Claude Code'u başlat
+claude
+
+# Etkileşimli modda ilk sorunu sor
+> Bu projenin README dosyasını Türkçe olarak yaz ve mevcut kod yapısını belgele.
+```
+
+Claude Code, dizindeki dosyaları tarar, kod yapısını analiz eder ve `README.md` dosyasını oluşturur. Tüm adımları terminalde açıklayarak ilerler.
+
+## Senaryolar
+
+### 1) Çok Dosyalı API Dönüşümü
+
+Eski bir REST API'yi modern bir yapıya taşımak:
+
+```bash
+claude "Tüm controller dosyalarını Express'ten Fastify'a migrate et. \
+Hata yönetimini (error handling) merkezi middleware'e taşı. \
+Mevcut testlerin geçtiğini doğrula."
+```
+
+Claude Code, `/controllers` dizinini tarar, her dosyayı dönüştürür, `package.json` bağımlılıklarını günceller ve `npm test` çalıştırarak doğrular.
+
+### 2) Otomatik Test Yazma
+
+```bash
+claude "src/utils/ altındaki tüm yardımcı fonksiyonlar için \
+Jest birim testleri (unit test) yaz. Kenar durumları (edge case) dahil et. \
+%80 kapsam (coverage) hedefi koy."
+```
+
+```python
+# Claude Code'un üreteceği test örneği
+# src/utils/__tests__/formatDate.test.js
+describe('formatDate', () => {
+  it('geçersiz tarih için null döndürmeli', () => {
+    expect(formatDate(null)).toBeNull();
+  });
+  it('ISO formatını Türkçe lokale çevirmeli', () => {
+    expect(formatDate('2026-05-23')).toBe('23 Mayıs 2026');
+  });
+});
+```
+
+### 3) Subagent Olarak Kullanım
+
+Claude Code'u bir orchestrator (düzenleyici) agent'ın altında worker olarak çalıştırma:
+
+```bash
+# claude --subagent bayrağı ile headless mod
+claude --print "Projedeki tüm TODO yorumlarını listele ve \
+her biri için bir GitHub issue taslağı oluştur." \
+--output-format json > todos.json
+```
+
+Bu çıktı başka bir otomasyon betiği tarafından işlenebilir.
+
+## Diğer araçlarla
+
+**MCP sunucularıyla:** Claude Code, [MCP protokolü](/kavramlar/mcp-protokol) üzerinden GitHub, Slack, Postgres, Stripe gibi 200+ servise bağlanabilir. `~/.claude/mcp_config.json` dosyasına sunucu tanımı eklenir.
+
+**GitHub Actions ile:** CI/CD boru hattında otomatik kod incelemesi için:
+
+```yaml
+# .github/workflows/claude-review.yml
+- name: Claude Code Review
+  run: claude --print "Bu PR'daki değişiklikleri incele, güvenlik açıkları ara" \
+       --output-format markdown >> $GITHUB_STEP_SUMMARY
+```
+
+**Agent Teams ile:** Birden fazla Claude Code örneği paralel çalıştırılabilir; bir "Araştırma" ajanı, bir "Yazma" ajanı ve bir "İnceleme" ajanı aynı proje üzerinde işbirliği yapar. Bkz. [çoklu ajan sistemleri](/kavramlar/multi-agent-systems).
+
+**Obsidian ile:** MCP üzerinden Obsidian vault'una yazarak kod kararlarını (architecture decision record) otomatik belgeler.
+
+## Yaygın hatalar ve çözümleri
+
+<details>
+<summary>ANTHROPIC_API_KEY bulunamadı hatası</summary>
+
+```bash
+# Kalıcı çözüm: shell profiline ekle
+echo 'export ANTHROPIC_API_KEY="sk-ant-..."' >> ~/.zshrc
+source ~/.zshrc
+```
+
+</details>
+
+<details>
+<summary>Bağlam penceresi doldu (context limit) uyarısı</summary>
+
+Çok büyük depo'larda Claude Code bağlam limitine çarpabilir. Çözümler:
+
+1. `.claudeignore` dosyası oluşturun (`node_modules`, `dist`, `.git` gibi dizinleri hariç tutun).
+2. Görevi daha küçük alt görevlere bölün.
+3. `--context-limit warn` bayrağı ile önceden uyarı alın.
+
+</details>
+
+<details>
+<summary>Windows'ta izin hatası (permission denied)</summary>
+
+PowerShell'i "Yönetici olarak çalıştır" seçeneğiyle açın veya WSL 2 kullanın:
+
+```bash
+wsl --install  # İlk kurulum
+wsl            # WSL terminaline geç
+npm install -g @anthropic-ai/claude-code
+```
+
+</details>
+
+<details>
+<summary>Boşta oturum token harcıyor</summary>
+
+`/stop` komutuyla oturumu kapatın veya `--no-idle` bayrağını kullanın. Bkz. Maliyet/limit bölümü.
+
+</details>
+
+## Maliyet / limit
+
+<Callout type="uyari">
+Çok ajanlı (multi-agent) kurulumda her ajan çağrısı ayrı bir model isteği üretir. Tüm görevleri Opus 4 ile çalıştırmak haftalık üç haneli Euro faturalara yol açabilir. Alt-ajanlara model ataması yapmak zorunlu bir disiplindir.
+</Callout>
+
+- **Boşta token tüketimi:** Açık oturum bağlam penceresini korur; uzun beklemelerde `/stop` ile çıkın.
+- **Model seçimi:** Varsayılan Opus 4 pahalıdır. İnceleme ve lint görevleri için Claude Sonnet 4.5, basit görevler için Claude Haiku kullanın.
+- **Subagent model sabitleme:** `CLAUDE.md` veya agent YAML yapılandırmasında model atayın:
+
+```yaml
+# .claude/agents/reviewer.yml
+model: claude-sonnet-4-5
+max_tokens: 4096
+```
+
+- **Pro Plan:** Anthropic Pro aboneliği aylık sabit ücretle genişletilmiş API erişimi sunar; yüksek hacimli kullanımda token başı ücretten daha uygun olabilir.
+- **1M token bağlam:** Büyük mono-repo'lar için avantajdır ancak her büyük bağlam çağrısı maliyeti artırır; `.claudeignore` ile gereksiz dosyaları dışarıda tutun.
+
+## Karşılaştırma
+
+Kodlama araçları arasında detaylı karşılaştırma için:
+[Claude Code vs Codex vs Antigravity](/karsilastirmalar/claude-code-vs-codex-vs-antigravity)
+
+Hangi aracın size uygun olduğunu bulmak için:
+[Hangi araç ne zaman?](/karsilastirmalar/hangi-arac-ne-zaman)
+
+## Daha fazla
+
+- [Resmi Claude Code dokümantasyonu](https://docs.anthropic.com/claude-code) — Anthropic
+- [Claude Code Cookbook](https://github.com/anthropics/anthropic-cookbook) — GitHub
+- [MCP Protokolü](/kavramlar/mcp-protokol) — Bu sitede
+- [Subagent pattern'ları](/kavramlar/agent-orchestration) — Bu sitede
+- [Modül 07: Claude Code ile Üretim](/modul/07-claude-code-uretim) — Adım adım eğitim

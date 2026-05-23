@@ -1,0 +1,245 @@
+---
+title: "OpenAI Agents SDK"
+slug: openai-agents-sdk
+category: araclar
+level: orta
+summary: "OpenAI'ın birinci taraf ajan geliştirme kiti; araç çağırımı, handoff (devir) mekanizması ve yerleşik izleme (tracing) ile üretim kaliteli ajan sistemleri inşa etmeyi kolaylaştırır."
+updated: 2026-05-23
+tags: ["sdk", "openai", "multi-agent", "birinci-taraf"]
+related: ["claude-agent-sdk", "langgraph", "openai-codex"]
+vendor: "OpenAI"
+toolType: "sdk"
+license: "MIT (açık kaynak)"
+os: ["macOS", "Linux", "Windows"]
+primary_model: "GPT-4o / o3"
+last_review: 2026-05-23
+status: "active"
+---
+
+## Nedir?
+
+OpenAI Agents SDK, OpenAI tarafından sunulan birinci taraf (first-party) ajan geliştirme kitidir (agent development kit). Ajan tanımı, araç (tool) entegrasyonu, ajan-arası devir (handoff) mekanizması ve yerleşik iz takibi (tracing) gibi temel yapı taşlarını soyutlayan bu SDK, karmaşık çerçeve kurulumu gerektirmeden GPT modellerini ajan olarak kullanmayı sağlar. "Swarm" projesinin resmi ve daha gelişmiş halefidir. Assistants v2 API ile entegre çalışarak kalıcı iş parçacığı (persistent thread) ve dosya yönetimini de destekler.
+
+## Ne için iyi
+
+- **OpenAI-first projeler:** GPT-4o ve o3 modellerini merkeze alan sistemler.
+- **Handoff mekanizması:** Bir ajandan diğerine bağlam koruyarak geçiş — müşteri hizmetlerinde triyaj+uzman akışı için ideal.
+- **Yapılandırılmış araç çağırımı (structured tool calling):** JSON şeması ile tanımlanan araçlar, tip güvenliği sağlar.
+- **Yerleşik izleme (tracing):** Ek altyapı gerekmeden ajan adımlarını takip etme.
+- **Assistants v2 entegrasyonu:** Kalıcı oturumlar, dosya yükleme, kod yorumlayıcı (code interpreter) araçları.
+- **Düşük öğrenme eğrisi:** OpenAI API'sini bilen geliştiriciler için doğal geçiş.
+
+## Ne için kötü
+
+- **GPT dışı modeller:** Anthropic veya Google modellerini ön plana çıkarmak isteyenler için sınırlı.
+- **Karmaşık durum yönetimi:** LangGraph'ın checkpoint ve persistent state derinliğine ulaşamaz.
+- **Açık kaynak model desteği:** Llama, Mistral gibi modeller için LangGraph veya CrewAI daha esnek.
+- **Çevrimdışı (offline) çalışma:** OpenAI API bağlantısı zorunludur.
+
+## Kurulum
+
+```bash
+# Python 3.10+ gereklidir
+pip install openai-agents
+
+# Ortam değişkeni
+export OPENAI_API_KEY="sk-proj-..."
+```
+
+<Callout type="ipucu">
+OpenAI Agents SDK, eski "Swarm" kütüphanesinin yerini almıştır. Swarm kullanan projelerinizi SDK'ya geçirmeniz önerilir; API yapısı benzerdir.
+</Callout>
+
+## İlk çalıştırma
+
+```python
+from openai_agents import Agent, Runner
+
+# Basit bir ajan tanımla
+agent = Agent(
+    name="Yardımcı",
+    instructions="Türkçe, nazik ve doğru yanıtlar ver.",
+    model="gpt-4o"
+)
+
+# Çalıştır
+result = Runner.run_sync(
+    agent,
+    "Agentic AI nedir? 2 cümleyle açıkla."
+)
+print(result.final_output)
+```
+
+## Senaryolar
+
+### 1) Araç (Tool) Entegrasyonu
+
+```python
+from openai_agents import Agent, Runner
+from openai_agents.tools import function_tool
+
+@function_tool
+def hava_durumu_getir(sehir: str) -> str:
+    """Verilen şehrin güncel hava durumunu getir."""
+    # Gerçek API çağrısı
+    response = weather_api.get(sehir)
+    return f"{sehir}: {response['temp']}°C, {response['condition']}"
+
+@function_tool
+def takvime_ekle(baslik: str, tarih: str, saat: str) -> str:
+    """Takvime yeni etkinlik ekle."""
+    calendar_api.create_event(baslik, tarih, saat)
+    return f"Etkinlik oluşturuldu: {baslik} - {tarih} {saat}"
+
+# Araçlı ajan
+asistan = Agent(
+    name="Kişisel Asistan",
+    instructions="Kullanıcının günlük planlamasına yardım et.",
+    tools=[hava_durumu_getir, takvime_ekle],
+    model="gpt-4o"
+)
+```
+
+### 2) Handoff ile Çoklu Ajan Sistemi
+
+```python
+from openai_agents import Agent, Runner, handoff
+
+# Uzman ajanlar
+teknik_ajan = Agent(
+    name="Teknik Destek",
+    instructions="Teknik sorunları çöz. Kodu ve hata mesajlarını analiz et.",
+    model="gpt-4o"
+)
+
+fatura_ajani = Agent(
+    name="Fatura Destek",
+    instructions="Fatura ve ödeme sorunlarını çöz.",
+    model="gpt-4o-mini"  # Daha ucuz model
+)
+
+# Triyaj ajanı — handoff kararlarını verir
+triage_agent = Agent(
+    name="Triyaj",
+    instructions="""Gelen sorunu analiz et ve uygun uzmana yönlendir.
+    Teknik sorunlar için teknik_ajan'a, fatura için fatura_ajani'na devret.""",
+    handoffs=[
+        handoff(teknik_ajan),
+        handoff(fatura_ajani)
+    ],
+    model="gpt-4o-mini"  # Sınıflandırma için ucuz model
+)
+
+# Kullanıcı sorusunu triyaj ajanına ver
+result = Runner.run_sync(triage_agent, "Docker container'ım başlamıyor, hata kodu 137.")
+# Triyaj ajanı otomatik olarak teknik ajana devreder
+print(result.final_output)
+```
+
+### 3) Kod Yorumlayıcı ile Veri Analizi
+
+```python
+from openai_agents import Agent, Runner, CodeInterpreterTool
+
+analist = Agent(
+    name="Veri Analisti",
+    instructions="Veri setlerini analiz et, grafikler oluştur, istatistiksel sonuçlar sun.",
+    tools=[CodeInterpreterTool()],  # Python kodu çalıştırabilir
+    model="gpt-4o"
+)
+
+# Dosya ile birlikte çalıştır
+with open("satis_verileri.csv", "rb") as f:
+    result = Runner.run_sync(
+        analist,
+        "Bu satış verilerini analiz et. Aylık trend grafiği oluştur ve en iyi ürünleri listele.",
+        files=[f]
+    )
+print(result.final_output)
+```
+
+## Diğer araçlarla
+
+**OpenAI Codex ile:** [OpenAI Codex](/araclar/openai-codex), Agents SDK üzerinde çalışan özelleşmiş bir yazılım geliştirme ajanıdır. SDK, Codex'in altyapısını oluşturur.
+
+**MCP protokolüyle:** OpenAI Agents SDK, [MCP protokolü](/kavramlar/mcp-protokol) uyumlu araçları entegre edebilir:
+
+```python
+from openai_agents.mcp import MCPServerTool
+
+agent = Agent(
+    tools=[MCPServerTool(server_url="http://localhost:3000")]
+)
+```
+
+**LangGraph ile:** Agents SDK ile LangGraph'ı birlikte kullanmak mümkündür — Agents SDK ajan tanımı, LangGraph üst düzey orkestrasyon için.
+
+**Assistants v2 ile:** Uzun süreli, dosya tabanlı oturumlar için Assistants v2 API'siyle entegre kullanın.
+
+## Yaygın hatalar ve çözümleri
+
+<details>
+<summary>Handoff sonsuz döngüde kalıyor</summary>
+
+```python
+# Maksimum tur sayısı sınırı ekle
+result = Runner.run_sync(
+    triage_agent,
+    message,
+    max_turns=10  # Sonsuz handoff döngüsünü önler
+)
+```
+
+</details>
+
+<details>
+<summary>Araç çağrısı tip hatası (TypeError)</summary>
+
+`@function_tool` dekoratörü, fonksiyon parametre tiplerini JSON şemasına dönüştürür. Tip ipuçlarını (type hints) eksiksiz yazın:
+
+```python
+@function_tool
+def arama_yap(sorgu: str, max_sonuc: int = 5) -> list[str]:
+    """Arama yap ve sonuçları döndür."""
+    ...
+```
+
+</details>
+
+<details>
+<summary>Uzun oturum bağlam sınırına ulaşıldı</summary>
+
+```python
+# Oturumu özetle ve yeni oturum başlat
+ozet = summarize_conversation(result.messages)
+new_result = Runner.run_sync(
+    agent,
+    f"Önceki konuşma özeti: {ozet}\n\nYeni soru: {user_input}"
+)
+```
+
+</details>
+
+## Maliyet / limit
+
+- **Model başına maliyet:** GPT-4o, GPT-4o-mini ve o3 farklı token fiyatlarına sahiptir. Triyaj ve basit görevler için `gpt-4o-mini` kullanın.
+- **Handoff maliyeti:** Her handoff yeni bir ajan bağlamı (context) oluşturabilir; tam oturum geçmişi iletilirken token maliyeti artar. Önemli bilgileri özet geçmek tercih edin.
+- **Code Interpreter:** Dosya işleme ve kod yürütme ek maliyet üretir.
+
+<Callout type="uyari">
+Karmaşık handoff zincirleri (triyaj → uzman → üst uzman) her geçişte bağlam büyüdüğünden token maliyeti katlanabilir. Geçiş noktalarında bağlamı özetleyerek iletmek önerilir.
+</Callout>
+
+## Karşılaştırma
+
+[Framework seçim rehberi](/karsilastirmalar/framework-secim-rehberi)
+
+[Hangi araç ne zaman?](/karsilastirmalar/hangi-arac-ne-zaman)
+
+## Daha fazla
+
+- [OpenAI Agents SDK dokümantasyonu](https://platform.openai.com/docs/agents) — OpenAI Platform
+- [OpenAI Agents SDK GitHub](https://github.com/openai/openai-agents-python) — Açık kaynak
+- [OpenAI Cookbook — Agents](https://cookbook.openai.com/topics/agents) — OpenAI
+- [Assistants v2 kılavuzu](https://platform.openai.com/docs/assistants) — OpenAI
+- [Claude Agent SDK](/araclar/claude-agent-sdk) — Anthropic'in birinci taraf alternatifi

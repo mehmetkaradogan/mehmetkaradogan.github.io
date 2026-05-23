@@ -1,0 +1,58 @@
+---
+// src/components/TopBar.astro
+// Sticky top bar: logo, search trigger, theme toggle, mobile sidebar button.
+
+import ThemeToggle from './ThemeToggle.astro';
+import SearchModal from './SearchModal.astro';
+---
+
+<header
+  class="sticky top-0 z-50 border-b"
+  style="background-color: var(--bg-surface); border-color: var(--border-color);"
+>
+  <div class="flex items-center justify-between h-14 px-4 sm:px-6 max-w-none">
+    <!-- Left: sidebar open + logo -->
+    <div class="flex items-center gap-3">
+      <!-- Mobile sidebar toggle (visible < lg) -->
+      <button
+        id="sidebar-open-btn"
+        type="button"
+        aria-label="Kenar çubuğunu aç"
+        aria-expanded="false"
+        aria-controls="mobile-sidebar-panel"
+        class="lg:hidden w-9 h-9 rounded-lg flex items-center justify-center transition-colors"
+        style="background-color: var(--bg-subtle); color: var(--text-secondary);"
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="3" y1="6" x2="21" y2="6"/>
+          <line x1="3" y1="12" x2="21" y2="12"/>
+          <line x1="3" y1="18" x2="21" y2="18"/>
+        </svg>
+      </button>
+
+      <!-- Logo -->
+      <a
+        href="/"
+        class="flex items-center gap-2 font-bold text-lg tracking-tight"
+        aria-label="Agentic AI Öğrenme Merkezi — Ana sayfa"
+      >
+        <!-- Mini logo mark -->
+        <span
+          class="hidden sm:flex w-7 h-7 rounded-lg items-center justify-center text-white text-xs font-black"
+          style="background-color: var(--brand);"
+          aria-hidden="true"
+        >
+          AI
+        </span>
+        <span style="color: var(--brand);">Agentic AI</span>
+        <span class="hidden sm:inline" style="color: var(--text-primary);">Öğrenme Merkezi</span>
+      </a>
+    </div>
+
+    <!-- Right: search + theme toggle -->
+    <div class="flex items-center gap-2">
+      <SearchModal />
+      <ThemeToggle />
+    </div>
+  </div>
+</header>

@@ -1,0 +1,206 @@
+---
+title: "Araştırma Ajanı ile Derin Analiz"
+slug: arastirma
+category: senaryolar
+level: orta
+summary: "Bir LLM ajanının (agent) web araması, PDF okuma ve kaynak sentezi yeteneklerini kullanarak saatler süren araştırma görevlerini dakikalara indirdiği senaryo."
+updated: 2026-05-23
+tags: ["arastirma", "rag", "tool-use", "web-search", "multi-agent"]
+related: ["kod-yazma", "kisisel-bilgi-yonetimi", "veri-toplama"]
+---
+
+## Senaryo Tanımı
+
+Araştırma senaryosu (research scenario), bir kullanıcının belirli bir konuda kapsamlı bilgi toplaması, kaynakları değerlendirmesi ve sentezlenmiş bir çıktı üretmesi gerektiğinde ajan tabanlı yaklaşımın nasıl işe yaradığını gösterir. Geleneksel yaklaşımda araştırmacı onlarca sekme açar, PDF'leri okur ve notları elle birleştirir. Ajan (agent) yaklaşımında bu adımlar otomatik bir döngüde çalışır.
+
+Tipik kullanım durumları:
+- Akademik literatür taraması
+- Rekabet analizi (competitive intelligence)
+- Yasal/teknik mevzuat incelemesi
+- Pazar araştırması raporları
+- Teknik kıyaslama (benchmark) özetleri
+
+<Callout type="info">
+Bu senaryo orta seviye olarak sınıflandırılmıştır çünkü birden fazla aracın (tool) koordineli kullanımını ve retrieval-augmented generation (RAG) temelini gerektirir. Başlamadan önce [/baslangic/ilk-agent](/baslangic/ilk-agent) sayfasını tamamlamanız önerilir.
+</Callout>
+
+---
+
+## Hangi Araçlar Uygundur?
+
+| Araç | Kullanım amacı | Bağlantı |
+|---|---|---|
+| Claude Code | Terminal tabanlı araştırma pipeline'ı yazma | [/araclar/claude-code](/araclar/claude-code) |
+| Google Antigravity 2.0 | Browser control ile canlı web araştırması | [/araclar/google-antigravity](/araclar/google-antigravity) |
+| LangGraph | Durable, checkpoint'li araştırma grafiği | [/araclar/langgraph](/araclar/langgraph) |
+| CrewAI | Araştırmacı + sentezci + eleştirmen rolleriyle hızlı prototip | [/araclar/crewai](/araclar/crewai) |
+| n8n | No-code web scraping + özetleme pipeline'ı | [/araclar/n8n](/araclar/n8n) |
+
+**Model önerisi:** Araştırma kalitesi için Claude Sonnet 4.5 veya Gemini 3 Pro; maliyet tasarrufu için tarama adımlarında Haiku/Flash kullanın.
+
+---
+
+## Önerilen Workflow Deseni
+
+Bu senaryo için **Plan-and-Execute** deseni en uygundur. Ajan önce araştırma planını oluşturur (hangi kaynaklar, hangi sorular), ardından paralel olarak veri toplar, son aşamada sentez yapar.
+
+Detaylı desen açıklaması: [/workflow/desenler](/workflow/desenler)
+
+```
+[Kullanıcı sorusu]
+       ↓
+[Planlayıcı: alt-sorular oluştur]
+       ↓
+[Paralel araştırma worker'ları]
+ ├── web_search(alt-soru-1)
+ ├── web_search(alt-soru-2)
+ └── fetch_pdf(kaynak-url)
+       ↓
+[Retriever: alakalı bölümleri çıkar]
+       ↓
+[Sentez agent'ı: taslak oluştur]
+       ↓
+[Eleştirmen agent'ı: boşlukları bul]
+       ↓
+[Final rapor]
+```
+
+---
+
+## Adım Adım Örnek
+
+### Hedef
+"LangGraph ve CrewAI'nin üretim olgunluğunu 2026 itibariyle karşılaştır, kaynakları belgele."
+
+### Adım 1 — Gereksinimler
+
+```bash
+pip install langchain-anthropic langgraph duckduckgo-search pypdf
+```
+
+### Adım 2 — Minimal Araştırma Agent'ı (Python)
+
+```python
+import os
+from typing import TypedDict, Annotated, List
+from langchain_anthropic import ChatAnthropic
+from langchain_core.tools import tool
+from langchain_community.tools import DuckDuckGoSearchRun
+from langgraph.graph import StateGraph, END
+from langgraph.prebuilt import ToolNode
+
+# --- Araçları tanımla ---
+search = DuckDuckGoSearchRun()
+
+@tool
+def web_search(query: str) -> str:
+    """Web'de arama yap ve sonuçları döndür."""
+    return search.run(query)
+
+@tool
+def synthesize(sources: List[str], question: str) -> str:
+    """Verilen kaynakları kullanarak soruyu yanıtla."""
+    combined = "\n\n---\n\n".join(sources)
+    return f"Kaynaklar:\n{combined}\n\nSoru: {question}"
+
+tools = [web_search, synthesize]
+
+# --- LLM ve graph ---
+llm = ChatAnthropic(
+    model="claude-sonnet-4-5",
+    api_key=os.environ["ANTHROPIC_API_KEY"]
+).bind_tools(tools)
+
+class ResearchState(TypedDict):
+    messages: Annotated[list, "Mesaj geçmişi"]
+    sources: List[str]
+
+def researcher(state: ResearchState):
+    response = llm.invoke(state["messages"])
+    return {"messages": [response]}
+
+def should_continue(state: ResearchState):
+    last = state["messages"][-1]
+    if hasattr(last, "tool_calls") and last.tool_calls:
+        return "tools"
+    return END
+
+graph = StateGraph(ResearchState)
+graph.add_node("researcher", researcher)
+graph.add_node("tools", ToolNode(tools))
+graph.set_entry_point("researcher")
+graph.add_conditional_edges("researcher", should_continue)
+graph.add_edge("tools", "researcher")
+
+app = graph.compile()
+
+# --- Çalıştır ---
+result = app.invoke({
+    "messages": [
+        {
+            "role": "user",
+            "content": (
+                "LangGraph ve CrewAI'nin 2026 itibariyle "
+                "üretim olgunluğunu karşılaştır. "
+                "Web araması yap, kaynakları belirt."
+            )
+        }
+    ],
+    "sources": []
+})
+
+print(result["messages"][-1].content)
+```
+
+<Callout type="ipucu">
+Araştırma agent'larında **checkpoint** kullanın. Uzun araştırmalar ortasında kesilirse kaldığı yerden devam edebilir. LangGraph'ta `MemorySaver` veya `SqliteSaver` eklemek yeterlidir.
+</Callout>
+
+### Adım 3 — Paralel Araştırmayı Genişletme
+
+Birden fazla alt-soruyu eş zamanlı araştırmak için `Send` API'sini kullanabilirsiniz:
+
+```python
+from langgraph.constants import Send
+
+def plan_research(state):
+    sub_questions = [
+        "LangGraph production deployments 2026",
+        "CrewAI enterprise use cases 2026",
+        "LangGraph vs CrewAI performance benchmarks"
+    ]
+    return [Send("researcher", {"messages": [{"role": "user", "content": q}], "sources": []})
+            for q in sub_questions]
+```
+
+---
+
+## No-Code Alternatif (n8n)
+
+[n8n](/araclar/n8n) ile aynı pipeline'ı kodsuz kurmak mümkündür:
+
+<details>
+<summary>n8n iş akışı adımları</summary>
+
+1. **Tetikleyici:** Manuel veya webhook ile araştırma sorusu girin.
+2. **HTTP Request node:** Serper.dev veya Brave Search API'ye bağlanın.
+3. **Code node:** Sonuçları temizleyin ve parçalayın (chunk).
+4. **AI Agent node:** Claude veya GPT-4o ile özetleme yapın.
+5. **Merge node:** Birden fazla arama sonucunu birleştirin.
+6. **Google Docs / Notion node:** Raporu otomatik kaydedin.
+
+Benzer bir iş akışı Make.com'da da kurulabilir; [/araclar/make](/araclar/make) sayfasına bakın.
+
+</details>
+
+---
+
+## İlgili Projeler
+
+- [/projeler/baslangic](/projeler/baslangic) — RSS okuyup haftalık bülten üreten agent
+- [/projeler/orta](/projeler/orta) — Multi-agent içerik üretim hattı (araştırmacı + yazar + editör)
+- [/projeler/ileri](/projeler/ileri) — LangGraph ile durable, uzun süreli görev
+
+<Callout type="uyari">
+Araştırma agent'ları web'den veri çeker. Telif hakkı ve kullanım koşullarına dikkat edin; ticari amaçlı araştırmalarda kaynakları her zaman doğrulayın.
+</Callout>

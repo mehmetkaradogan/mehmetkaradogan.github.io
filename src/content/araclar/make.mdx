@@ -1,0 +1,192 @@
+---
+title: "Make"
+slug: make
+category: araclar
+level: giris
+summary: "Bulut tabanlı görsel iş akışı otomasyon platformu; 1500+ uygulama entegrasyonu, gelişmiş veri dönüşüm araçları ve AI modül desteğiyle orta-ileri düzey no-code kullanıcılarına hitap eder."
+updated: 2026-05-23
+tags: ["no-code-automation", "bulut", "iş-akışı", "entegrasyon"]
+related: ["n8n", "zapier", "langgraph"]
+vendor: "Make (eski adıyla Integromat)"
+toolType: "no-code-automation"
+license: "Proprietary (ücretsiz katman var)"
+os: ["Web (tarayıcı tabanlı)"]
+primary_model: "Model bağımsız (OpenAI, Anthropic, Gemini modülleri mevcut)"
+last_review: 2026-05-23
+status: "active"
+---
+
+## Nedir?
+
+Make (eski adıyla Integromat), bulut tabanlı görsel iş akışı (workflow) otomasyon platformudur. 1500'den fazla uygulama ve servis entegrasyonu sunan Make, "senaryo (scenario)" adını verdiği görsel iş akışlarında veri dönüşümü (data transformation), döngüler, koşullar ve hata yönetimi gibi ileri düzey özellikler sağlar. Zapier'den daha güçlü veri manipülasyonu yetenekleri, n8n'den daha kolay başlangıç deneyimi sunan Make; teknik okuryazar kullanıcılar ve orta düzey otomasyon ihtiyaçları için güçlü bir konumdadır. OpenAI ve Anthropic modülleri sayesinde AI destekli iş akışları oluşturmak düşük kodla mümkündür.
+
+## Ne için iyi
+
+- **Veri dönüşümü:** JSON işleme, metin manipülasyonu, matematik işlemleri için n8n ve Zapier'den zengin araç seti.
+- **Gelişmiş kontrol akışı:** İç içe döngüler (nested loop), hata işleyiciler (error handler), tekrar deneme (retry) mekanizmaları.
+- **1500+ entegrasyon:** Zapier ile karşılaştırılabilir geniş uygulama kütüphanesi.
+- **AI modülleri:** OpenAI (GPT-4o dahil), Anthropic (Claude dahil), Google Gemini modülleri hazır.
+- **Fiyat/özellik dengesi:** Zapier'den daha ucuz, n8n self-host'tan daha kolay yönetim.
+- **Görsel hata ayıklama (debug):** Her modülün girdi/çıktısını görsel olarak inceleme.
+- **Webhooklar:** Gelen ve giden webhook desteği; API entegrasyonları için HTTP modülü.
+
+## Ne için kötü
+
+- **Self-host gereksinimi:** Make tamamen bulut tabanlıdır; veri gizliliği için self-host isteyenler n8n kullanmalı.
+- **Ücretsiz katman sınırı:** Aylık 1,000 operasyon ile ciddi iş akışları için hızla yetersiz kalır.
+- **Gelişmiş AI orkestrasyonu:** Derin çoklu ajan sistemleri için LangGraph daha uygundur.
+- **Yüksek hacimli otomasyon:** Çok sayıda operasyon içeren kullanım senaryolarında maliyet hızla artar.
+
+## Kurulum
+
+Make tamamen web tabanlıdır — kurulum gerekmez.
+
+```bash
+# Make API'sini programatik olarak kullanmak isteyenler için
+# (ileri düzey — çoğu kullanıcı için gerekli değil)
+curl -X GET \
+  https://eu1.make.com/api/v2/scenarios \
+  -H "Authorization: Token MAKE_API_TOKEN"
+```
+
+<Callout type="ipucu">
+make.com adresine giderek ücretsiz hesap oluşturun. Aylık 1,000 operasyon ve 2 aktif senaryo ile başlayabilirsiniz. Kredi kartı gerekmez.
+</Callout>
+
+## İlk çalıştırma
+
+1. [make.com](https://make.com) adresine gidin ve ücretsiz hesap oluşturun.
+2. "Create a new scenario" butonuna tıklayın.
+3. Tetikleyici modül seçin (örn. Gmail — "Watch emails").
+4. Gmail hesabınıza izin verin (OAuth).
+5. "+" ile yeni modül ekleyin → OpenAI → "Create a Completion".
+6. OpenAI API anahtarınızı girin.
+7. İki modülü bağlayın: Gmail'den gelen e-posta metni → OpenAI'a gönder.
+8. "Run once" ile test edin.
+
+## Senaryolar
+
+### 1) AI Destekli Müşteri Geri Bildirimi Analizi
+
+```
+Tetikleyici: Google Forms (yeni form yanıtı)
+    ↓
+[OpenAI Modülü]
+  Model: gpt-4o-mini
+  Prompt: "Bu müşteri geri bildirimini analiz et. 
+  Duygu: Pozitif/Negatif/Nötr
+  Konu: [ana şikayet veya övgü]
+  Aciliyet: 1-5
+  Yanıt ver: JSON formatında"
+    ↓
+[JSON Parser]: Yanıtı ayrıştır
+    ↓
+Koşul: Duygu == "Negatif" VE Aciliyet >= 4?
+    ├── Evet → Slack'e acil bildirim + Jira'da ticket aç
+    └── Hayır → Airtable'a kaydet + haftalık raporlama kuyruğuna ekle
+```
+
+### 2) İçerik Lokalizasyon Hattı
+
+```
+Tetikleyici: Notion (yeni blog yazısı)
+    ↓
+[Anthropic / Claude Modülü]
+  Görev: İngilizce metni Türkçe, Almanca ve İspanyolcaya çevir
+    ↓
+[Iterator]: Her dil için ayrı işlem
+    ↓
+[Google Docs Modülü]: Her dil için belge oluştur
+    ↓
+[Slack Modülü]: Editöre bildirim gönder
+```
+
+### 3) Akıllı Lead Triyajı
+
+```
+Tetikleyici: Webhook (CRM'den yeni lead)
+    ↓
+[HTTP Modülü]: Şirket web sitesini çek (opsiyonel — LinkedIn API)
+    ↓
+[OpenAI Modülü]
+  Görev: "Bu lead'i ICP'mize (Ideal Customer Profile) göre puanla. 
+  Şirket büyüklüğü, sektör ve bütçe sinyallerine bak. 
+  Puan: 1-10, Gerekçe: 1 cümle"
+    ↓
+[Hubspot Modülü]: Lead'i güncelle (puan + gerekçe ekle)
+    ↓
+Koşul: Puan >= 7?
+    ├── Evet → Satış temsilcisine Slack DM + Takvime arama ekle
+    └── Hayır → Nurturing sequence'a ekle
+```
+
+## Diğer araçlarla
+
+**Zapier ile karşılaştırma:** Make, Zapier'den daha güçlü veri dönüşüm araçları sunar ancak Zapier'in kullanım kolaylığına ulaşamaz. Bkz. [n8n vs Make vs Zapier](/karsilastirmalar/n8n-vs-make-vs-zapier).
+
+**n8n ile karşılaştırma:** n8n self-host ve veri gizliliği sunarken Make tam yönetilen bulut hizmeti sunar. Teknik altyapı yönetmek istemeyenler için Make tercih edilir.
+
+**LangGraph/CrewAI ile:** Make, HTTP modülü aracılığıyla Python AI servisleriyle entegre olabilir. Make otomasyon ve zamanlama, Python servisi AI işleme üstlenir.
+
+**Google Workspace ile:** Make'in Gmail, Google Sheets, Google Drive, Google Calendar entegrasyonları olgun ve güvenilirdir — Google iş akışları için ideal tercih.
+
+## Yaygın hatalar ve çözümleri
+
+<details>
+<summary>Operasyon kotası hızla doldu</summary>
+
+Her modül çalışması = 1 operasyon. Döngüler (loop) içindeki modüller iterasyon başına sayılır. Yüksek hacimli akışlar için operasyon sayısını önceden hesaplayın: döngü içindeki modüller × iterasyon sayısı.
+
+Çözüm: Üst plana geçin veya gereksiz modülleri kaldırın. Filtre ekleyerek yalnızca gerekli verileri işleyin.
+
+</details>
+
+<details>
+<summary>Webhook verileri alınmıyor</summary>
+
+Make Webhook URL'sinin "aktif" durumda olduğunu kontrol edin. Test için:
+
+```bash
+curl -X POST "YOUR_MAKE_WEBHOOK_URL" \
+  -H "Content-Type: application/json" \
+  -d '{"test": "veri"}'
+```
+
+Make panelinde "Run once" modunda bekleyin, ardından isteği gönderin.
+
+</details>
+
+<details>
+<summary>JSON parse hatası — beklenmedik format</summary>
+
+OpenAI modülünden gelen yanıt her zaman düzgün JSON olmayabilir. "Text parser" modülü ekleyerek `{{item.choices[].message.content}}` değerini çekin, ardından JSON modülüyle ayrıştırın.
+
+</details>
+
+## Maliyet / limit
+
+- **Ücretsiz:** Aylık 1,000 operasyon, 2 aktif senaryo — denemek için yeterli.
+- **Core:** Aylık sabit ücretle 10,000 operasyon, sınırsız senaryo.
+- **Pro / Teams:** Daha yüksek operasyon kotası, öncelikli destek, takım işbirliği.
+- **Enterprise:** Özel kota, SSO, SLA garantisi.
+
+<Callout type="info">
+Make fiyatlandırması "operasyon" bazındadır. Her modül çalışması = 1 operasyon. Aylık 10,000 operasyon çoğu küçük-orta iş yükü için yeterlidir; yüksek hacimli otomasyon için n8n self-host daha ekonomik olabilir.
+</Callout>
+
+- **AI API maliyeti:** Make üzerinden yapılan OpenAI/Anthropic çağrıları kendi API hesabınızdan ücretlendirilir; Make bu maliyeti üstlenmez.
+
+## Karşılaştırma
+
+[n8n vs Make vs Zapier](/karsilastirmalar/n8n-vs-make-vs-zapier)
+
+[Hangi araç ne zaman?](/karsilastirmalar/hangi-arac-ne-zaman)
+
+## Daha fazla
+
+- [Make resmi dokümantasyonu](https://www.make.com/en/help) — Make
+- [Make Akademi](https://academy.make.com) — Ücretsiz kurslar
+- [Make topluluk forumu](https://community.make.com) — Topluluk
+- [Make şablon galerisi](https://www.make.com/en/templates) — Hazır senaryolar
+- [n8n](/araclar/n8n) — Self-host alternatifi
+- [Zapier](/araclar/zapier) — Daha basit alternatif

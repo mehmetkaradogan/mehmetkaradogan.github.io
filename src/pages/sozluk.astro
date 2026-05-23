@@ -1,0 +1,159 @@
+---
+// src/pages/sozluk.astro
+// A-Z grouped glossary with inline client-side text filter.
+
+import BaseLayout from '@layouts/BaseLayout.astro';
+import Breadcrumb from '@components/Breadcrumb.astro';
+import { sozluk } from '../data/sozluk';
+
+// Group by first letter (uppercase, Turkish-aware)
+const grouped = sozluk.reduce<Record<string, typeof sozluk>>((acc, term) => {
+  const letter = term.term.charAt(0).toLocaleUpperCase('tr-TR');
+  if (!acc[letter]) acc[letter] = [];
+  acc[letter]!.push(term);
+  return acc;
+}, {});
+
+const letters = Object.keys(grouped).sort((a, b) => a.localeCompare(b, 'tr'));
+---
+
+<BaseLayout
+  title="Sözlük"
+  description="Agentic AI terimler sözlüğü: Agent, Tool Use, MCP, RAG, Orchestrator ve daha fazlası Türkçe tanımlarla."
+>
+  <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <Breadcrumb crumbs={[{ label: 'Sözlük' }]} />
+
+    <header class="mb-8">
+      <h1 class="text-3xl font-bold mb-3" style="color: var(--text-primary);">Sözlük</h1>
+      <p class="text-base mb-4" style="color: var(--text-secondary);">
+        Agentic AI terimlerinin kısa ve uzun Türkçe tanımları.
+      </p>
+
+      <!-- Client-side filter input -->
+      <input
+        type="search"
+        id="sozluk-filter"
+        placeholder="Terim ara... (örn: agent, rag, mcp)"
+        aria-label="Terim ara"
+        autocomplete="off"
+        class="w-full max-w-md px-4 py-2 rounded-xl border text-sm"
+        style="background-color: var(--bg-base); border-color: var(--border-color); color: var(--text-primary);"
+      />
+    </header>
+
+    <!-- Letter anchor nav -->
+    <nav aria-label="Harfe göre git" class="flex flex-wrap gap-1 mb-8">
+      {letters.map((l) => (
+        <a
+          href={`#letter-${l}`}
+          class="w-8 h-8 flex items-center justify-center rounded-lg text-sm font-mono font-semibold transition-colors hover:opacity-80"
+          style="background-color: var(--bg-subtle); color: var(--text-secondary);"
+        >
+          {l}
+        </a>
+      ))}
+    </nav>
+
+    <!-- Glossary entries -->
+    <div id="sozluk-entries" class="space-y-10">
+      {letters.map((letter) => (
+        <section id={`letter-${letter}`} aria-labelledby={`heading-${letter}`}>
+          <h2
+            id={`heading-${letter}`}
+            class="text-xl font-black font-mono mb-4 sticky top-20"
+            style="color: var(--brand); background-color: var(--bg-base);"
+          >
+            {letter}
+          </h2>
+          <dl class="space-y-6">
+            {grouped[letter]!.sort((a, b) => a.term.localeCompare(b.term, 'tr')).map((item) => (
+              <div
+                id={`term-${item.term.toLowerCase().replace(/\s+/g, '-')}`}
+                class="sozluk-term"
+                data-term={item.term.toLocaleLowerCase('tr-TR')}
+              >
+                <dt class="flex items-center gap-3">
+                  <span class="font-bold text-base" style="color: var(--text-primary);">{item.term}</span>
+                  {item.link && (
+                    <a
+                      href={item.link}
+                      class="text-xs hover:underline"
+                      style="color: var(--brand);"
+                    >
+                      Sayfaya git →
+                    </a>
+                  )}
+                </dt>
+                <dd class="mt-1">
+                  <p class="text-sm" style="color: var(--text-secondary);">{item.short}</p>
+                  {item.long && (
+                    <details class="mt-2">
+                      <summary class="text-xs cursor-pointer" style="color: var(--text-muted);">Daha fazla</summary>
+                      <p class="mt-2 text-sm leading-relaxed" style="color: var(--text-secondary);">{item.long}</p>
+                    </details>
+                  )}
+                  {item.related && item.related.length > 0 && (
+                    <div class="mt-2 flex flex-wrap gap-1">
+                      {item.related.map((r) => (
+                        <a
+                          href={`#term-${r.toLowerCase().replace(/\s+/g, '-')}`}
+                          class="text-xs px-2 py-0.5 rounded-md hover:underline"
+                          style="background-color: var(--bg-subtle); color: var(--text-muted); border: 1px solid var(--border-color);"
+                        >
+                          {r}
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      ))}
+    </div>
+
+    <!-- Empty state (shown by JS when filter has no results) -->
+    <div id="sozluk-empty" class="hidden text-center py-12" aria-live="polite">
+      <p class="text-lg font-semibold" style="color: var(--text-primary);">Sonuç bulunamadı</p>
+      <p class="mt-2 text-sm" style="color: var(--text-secondary);">Farklı bir terim deneyin.</p>
+    </div>
+  </div>
+</BaseLayout>
+
+<script>
+  function initSozluk() {
+    const input = document.getElementById('sozluk-filter') as HTMLInputElement | null;
+    const terms = document.querySelectorAll<HTMLElement>('.sozluk-term');
+    const sections = document.querySelectorAll<HTMLElement>('#sozluk-entries section');
+    const empty = document.getElementById('sozluk-empty');
+
+    if (!input) return;
+
+    input.addEventListener('input', () => {
+      const q = input.value.toLocaleLowerCase('tr-TR').trim();
+      let visibleCount = 0;
+
+      terms.forEach((el) => {
+        const termText = el.dataset['term'] ?? '';
+        const matches = !q || termText.includes(q);
+        el.style.display = matches ? '' : 'none';
+        if (matches) visibleCount++;
+      });
+
+      // Hide letter sections with no visible terms
+      sections.forEach((section) => {
+        const hasVisible = Array.from(section.querySelectorAll('.sozluk-term')).some(
+          (t) => (t as HTMLElement).style.display !== 'none'
+        );
+        (section as HTMLElement).style.display = hasVisible ? '' : 'none';
+      });
+
+      if (empty) empty.classList.toggle('hidden', visibleCount > 0);
+    });
+  }
+
+  initSozluk();
+  document.addEventListener('astro:after-swap', initSozluk);
+</script>

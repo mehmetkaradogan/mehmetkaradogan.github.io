@@ -1,0 +1,169 @@
+---
+// src/pages/karsilastirmalar/hangi-arac-ne-zaman.astro
+// DEDICATED PAGE — not from collection. Explicit file route wins over dynamic [...slug].
+// Content: intro + DecisionTree island + quick reference table + links.
+
+import BaseLayout from '@layouts/BaseLayout.astro';
+import Breadcrumb from '@components/Breadcrumb.astro';
+import DecisionTree from '@components/islands/DecisionTree.tsx';
+---
+
+<BaseLayout
+  title="Hangi Araç Ne Zaman?"
+  description="İnteraktif karar ağacı ile hangi Agentic AI aracının ihtiyacınıza uygun olduğunu bulun."
+>
+  <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <Breadcrumb
+      crumbs={[
+        { label: 'Karşılaştırmalar', href: '/karsilastirmalar' },
+        { label: 'Hangi Araç Ne Zaman?' },
+      ]}
+    />
+
+    <header class="mb-8">
+      <h1 class="text-3xl font-bold mb-3" style="color: var(--text-primary);">Hangi Araç Ne Zaman?</h1>
+      <p class="text-base" style="color: var(--text-secondary);">
+        Aşağıdaki karar ağacını kullanarak ihtiyacınıza en uygun Agentic AI aracını bulun.
+        Her soru bir sonraki soruya ya da doğrudan bir araç önerisine götürür.
+      </p>
+    </header>
+
+    <!-- Decision Tree Island -->
+    <section
+      class="mb-16 p-6 sm:p-8 rounded-2xl border"
+      style="background-color: var(--bg-surface); border-color: var(--border-color);"
+      aria-labelledby="decision-tree-heading"
+    >
+      <h2 id="decision-tree-heading" class="text-xl font-bold mb-6" style="color: var(--text-primary);">
+        Karar Ağacı
+      </h2>
+      <DecisionTree client:load />
+    </section>
+
+    <!-- Quick Reference Table -->
+    <section aria-labelledby="quick-ref-heading" class="mb-16">
+      <h2 id="quick-ref-heading" class="text-xl font-bold mb-4" style="color: var(--text-primary);">
+        Hızlı Başvuru Tablosu
+      </h2>
+      <div class="overflow-x-auto rounded-xl border" style="border-color: var(--border-color);">
+        <table class="w-full text-sm">
+          <thead>
+            <tr style="background-color: var(--bg-subtle); border-bottom: 1px solid var(--border-color);">
+              <th class="text-left px-4 py-3 font-semibold" style="color: var(--text-primary);">Senaryo</th>
+              <th class="text-left px-4 py-3 font-semibold" style="color: var(--text-primary);">Önerilen Araç</th>
+              <th class="text-left px-4 py-3 font-semibold hidden sm:table-cell" style="color: var(--text-primary);">Neden</th>
+              <th class="text-left px-4 py-3 font-semibold hidden md:table-cell" style="color: var(--text-primary);">Alternatif</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[
+              {
+                scenario: 'Tek geliştirici, terminal seviyor, kod yazıyor',
+                tool: 'Claude Code',
+                href: '/araclar/claude-code',
+                why: 'Terminal-first, subagent desteği, 1M token bağlam',
+                alt: 'OpenAI Codex',
+              },
+              {
+                scenario: 'Multi-agent prototip 1 günde',
+                tool: 'CrewAI',
+                href: '/araclar/crewai',
+                why: 'Minimum boilerplate, role-based agent API',
+                alt: 'OpenAI Agents SDK',
+              },
+              {
+                scenario: 'Üretim, regülasyonlu sektör, denetlenebilir state',
+                tool: 'LangGraph',
+                href: '/araclar/langgraph',
+                why: 'State persistence, LangSmith gözlemlenebilirlik, checkpoint',
+                alt: 'Semantic Kernel',
+              },
+              {
+                scenario: 'Gemini ekosisteminde IDE içinde otonom agent',
+                tool: 'Google Antigravity',
+                href: '/araclar/google-antigravity',
+                why: 'Gemini 3 Pro, Plan Mode, browser control',
+                alt: 'Cursor',
+              },
+              {
+                scenario: 'Kodsuz iş akışı, SaaS entegrasyonu (self-host)',
+                tool: 'n8n',
+                href: '/araclar/n8n',
+                why: 'Açık kaynak, self-host, 400+ node',
+                alt: 'Make',
+              },
+              {
+                scenario: 'Kodsuz iş akışı, hızlı cloud kurulum',
+                tool: 'Make',
+                href: '/araclar/make',
+                why: 'Cloud, görsel editör, geniş entegrasyon',
+                alt: 'Zapier',
+              },
+              {
+                scenario: 'Browser otomasyonu odaklı',
+                tool: 'Claude Computer Use',
+                href: '/araclar/claude-code',
+                why: 'Görsel UI kontrolü, screenshot+click ajanı',
+                alt: 'Antigravity browser tool',
+              },
+              {
+                scenario: 'Microsoft / Azure ekosistemi',
+                tool: 'Semantic Kernel',
+                href: '/araclar/semantic-kernel',
+                why: '.NET + Python, Azure AI entegrasyonu',
+                alt: 'LangGraph',
+              },
+              {
+                scenario: 'Kişisel bilgi tabanı ile araştırma',
+                tool: 'Obsidian AI (MCP)',
+                href: '/araclar/obsidian-ai',
+                why: 'Vault bağlantısı, otomatik özet ve bağlantı',
+                alt: 'Claude Code + MCP',
+              },
+            ].map((row, i) => (
+              <tr
+                class="border-t"
+                style={`border-color: var(--border-color); background-color: ${i % 2 === 0 ? 'var(--bg-surface)' : 'var(--bg-subtle)'};`}
+              >
+                <td class="px-4 py-3" style="color: var(--text-primary);">{row.scenario}</td>
+                <td class="px-4 py-3">
+                  <a href={row.href} class="font-semibold hover:underline" style="color: var(--brand);">
+                    {row.tool}
+                  </a>
+                </td>
+                <td class="px-4 py-3 hidden sm:table-cell text-xs" style="color: var(--text-secondary);">{row.why}</td>
+                <td class="px-4 py-3 hidden md:table-cell text-xs" style="color: var(--text-muted);">{row.alt}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Related comparisons -->
+    <section aria-labelledby="related-heading">
+      <h2 id="related-heading" class="text-xl font-bold mb-4" style="color: var(--text-primary);">
+        Detaylı Karşılaştırmalar
+      </h2>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {[
+          { label: 'LangGraph vs CrewAI vs AutoGen', href: '/karsilastirmalar/langgraph-vs-crewai-vs-autogen' },
+          { label: 'Claude Code vs Codex vs Antigravity', href: '/karsilastirmalar/claude-code-vs-codex-vs-antigravity' },
+          { label: 'n8n vs Make vs Zapier', href: '/karsilastirmalar/n8n-vs-make-vs-zapier' },
+          { label: 'Framework Seçim Rehberi', href: '/karsilastirmalar/framework-secim-rehberi' },
+        ].map((link) => (
+          <a
+            href={link.href}
+            class="group flex items-center justify-between gap-2 p-4 rounded-xl border transition-all hover:shadow-sm"
+            style="background-color: var(--bg-surface); border-color: var(--border-color);"
+          >
+            <span class="text-sm font-medium group-hover:underline" style="color: var(--text-primary);">{link.label}</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--text-muted); flex-shrink: 0;">
+              <path d="M5 12h14M12 5l7 7-7 7"/>
+            </svg>
+          </a>
+        ))}
+      </div>
+    </section>
+  </div>
+</BaseLayout>

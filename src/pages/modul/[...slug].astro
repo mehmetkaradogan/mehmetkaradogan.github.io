@@ -1,0 +1,81 @@
+---
+// src/pages/modul/[...slug].astro
+// Modules with prev/next navigation and HowTo JSON-LD.
+
+import DocLayout from '@layouts/DocLayout.astro';
+import Callout from '@components/mdx/Callout.astro';
+import { getCollection } from 'astro:content';
+
+export async function getStaticPaths() {
+  const entries = await getCollection('modul', (e) => !e.data.draft);
+  const sorted = entries.sort((a, b) => a.data.modul.localeCompare(b.data.modul));
+
+  return sorted.map((entry, i) => {
+    const prev = i > 0 ? sorted[i - 1] : undefined;
+    const next = i < sorted.length - 1 ? sorted[i + 1] : undefined;
+    return {
+      params: { slug: entry.slug },
+      props: {
+        entry,
+        prev: prev ? { title: prev.data.title, href: `/modul/${prev.slug}` } : undefined,
+        next: next ? { title: next.data.title, href: `/modul/${next.slug}` } : undefined,
+      },
+    };
+  });
+}
+
+const { entry, prev, next } = Astro.props;
+const { Content, headings } = await entry.render();
+const fm = entry.data;
+---
+
+<DocLayout
+  title={fm.title}
+  description={fm.summary}
+  headings={headings}
+  frontmatter={fm}
+  {...(prev !== undefined ? { prev } : {})}
+  {...(next !== undefined ? { next } : {})}
+  breadcrumbs={[
+    { label: 'Modüller', href: '/modul' },
+    { label: `${fm.modul} · ${fm.title}` },
+  ]}
+  section="Modüller"
+  howTo={true}
+>
+  <!-- Module meta box -->
+  <div
+    class="not-prose rounded-xl border p-5 mb-8 grid grid-cols-1 sm:grid-cols-3 gap-4"
+    style="background-color: var(--bg-subtle); border-color: var(--border-color);"
+    aria-label="Modül bilgileri"
+  >
+    <div class="flex flex-col gap-1">
+      <span class="text-xs font-semibold uppercase tracking-wide" style="color: var(--text-muted);">Süre</span>
+      <span class="text-sm font-medium" style="color: var(--text-primary);">{fm.sure}</span>
+    </div>
+
+    {fm.onkosul.length > 0 && (
+      <div class="flex flex-col gap-1">
+        <span class="text-xs font-semibold uppercase tracking-wide" style="color: var(--text-muted);">Önkoşullar</span>
+        <ul class="space-y-0.5">
+          {fm.onkosul.map((o: string) => (
+            <li class="text-sm" style="color: var(--text-primary);">· {o}</li>
+          ))}
+        </ul>
+      </div>
+    )}
+
+    {fm.ciktilar.length > 0 && (
+      <div class="flex flex-col gap-1">
+        <span class="text-xs font-semibold uppercase tracking-wide" style="color: var(--text-muted);">Öğrenme Çıktıları</span>
+        <ul class="space-y-0.5">
+          {fm.ciktilar.map((c: string) => (
+            <li class="text-sm" style="color: var(--text-primary);">✓ {c}</li>
+          ))}
+        </ul>
+      </div>
+    )}
+  </div>
+
+  <Content components={{ Callout }} />
+</DocLayout>

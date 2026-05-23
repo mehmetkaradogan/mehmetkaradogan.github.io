@@ -1,0 +1,49 @@
+---
+// src/pages/projeler/[...slug].astro
+
+import DocLayout from '@layouts/DocLayout.astro';
+import Callout from '@components/mdx/Callout.astro';
+import { getCollection } from 'astro:content';
+
+export async function getStaticPaths() {
+  const entries = await getCollection('projeler', (e) => !e.data.draft);
+  return entries.map((entry) => ({
+    params: { slug: entry.slug },
+    props: { entry },
+  }));
+}
+
+const { entry } = Astro.props;
+const { Content, headings } = await entry.render();
+const fm = entry.data;
+
+const seviyeLabels: Record<string, string> = {
+  baslangic: 'Başlangıç',
+  orta:      'Orta',
+  ileri:     'İleri',
+};
+---
+
+<DocLayout
+  title={fm.title}
+  description={fm.summary}
+  headings={headings}
+  frontmatter={fm}
+  breadcrumbs={[
+    { label: 'Projeler', href: '/projeler' },
+    { label: fm.title },
+  ]}
+  section="Projeler"
+>
+  <!-- Proje seviye badge -->
+  <div class="not-prose mb-6">
+    <span
+      class="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold"
+      style="background-color: var(--color-primary-100); color: var(--color-primary-700);"
+    >
+      {seviyeLabels[fm.seviye] ?? fm.seviye} Proje
+    </span>
+  </div>
+
+  <Content components={{ Callout }} />
+</DocLayout>

@@ -1,0 +1,352 @@
+---
+title: "Google Antigravity ile Agentic Build"
+slug: 08-antigravity-ile-build
+category: modul
+level: ileri
+summary: "Google Antigravity 2.0 ile agentic IDE ortamında çalışma, Plan Mode ve Fast Mode kullanımı, Antigravity SDK ile özel agent geliştirme ve kendi MCP sunucusunu Antigravity'ye bağlama."
+updated: 2026-05-23
+tags: [google-antigravity, agentic-ide, gemini, plan-mode, sdk, ileri]
+related: [07-claude-code-uretim, 09-multi-model-orkestrasyon, 06-mcp-sunucu-yazma]
+modul: "08"
+sure: "120 dakika"
+onkosul: ["01-temeller", "06-mcp-sunucu-yazma", "07-claude-code-uretim"]
+ciktilar:
+  - "Antigravity 2.0 kurulumu ve temel arayüz kullanımı"
+  - "Plan Mode ile karmaşık görev planlama"
+  - "Antigravity SDK ile Python tabanlı özel agent yazma"
+  - "Kendi MCP sunucusunu Antigravity'ye bağlama"
+---
+
+## Hedef
+
+Bu modülün sonunda Google Antigravity 2.0'ı kurabilecek, Plan Mode ve Fast Mode arasında geçiş yapabilecek, Antigravity SDK ile özel Python agent'ı yazabilecek ve Modül 06'da yazdığın MCP sunucusunu Antigravity'ye bağlayabileceksin.
+
+## Önkoşullar
+
+- [Modül 06](/modul/06-mcp-sunucu-yazma) ve [Modül 07](/modul/07-claude-code-uretim) tamamlandı
+- Google hesabı (ücretsiz public preview erişimi için)
+- Python 3.11+
+
+## Öğrenme çıktıları
+
+1. Antigravity 2.0 IDE'yi kurup yapılandırabilirsin.
+2. Plan Mode ile büyük görevleri alt adımlara bölebilirsin.
+3. Antigravity SDK ile otonom Python agent'ı yazabilirsin.
+4. Kendi MCP sunucusunu Antigravity'ye bağlayabilirsin.
+5. Claude Code ve Antigravity arasındaki temel farkları karşılaştırabilirsin.
+
+---
+
+## Adım 1 — Google Antigravity 2.0 nedir?
+
+Google Antigravity, Kasım 2025'te çıkan ve Mayıs 2026'da 2.0 sürümüne ulaşan **agentic IDE**'dir. Gemini 3 Pro ile çalışır; VS Code fork tabanlı editör, Agent Manager uygulaması, CLI ve SDK içerir.
+
+Claude Code ile kıyaslaması:
+
+| Özellik | Antigravity 2.0 | Claude Code |
+|---|---|---|
+| Arayüz | GUI + CLI + SDK | Terminal-first |
+| Varsayılan model | Gemini 3 Pro | Claude Sonnet 4.5 |
+| Tarayıcı kontrolü | Yerleşik | Harici araç gerekir |
+| Bilgi tabanı | Yerleşik (öğrenme) | CLAUDE.md |
+| MCP desteği | Evet | Evet (native) |
+| Fiyat | Ücretsiz public preview | API token başı |
+| Plan Mode | Var | Yok (doğrudan çalışır) |
+
+<Callout type="info">
+Antigravity, eski Gemini CLI'ı resmi olarak değiştirdi. Gemini CLI kullanan projeler Antigravity CLI'a geçiş yapmalı.
+</Callout>
+
+---
+
+## Adım 2 — Kurulum
+
+**Windows/macOS/Linux (GUI):**
+
+1. [antigravity.google.dev](https://antigravity.google.dev) adresinden platformuna uygun paketi indir.
+2. Kurulum sihirbazını tamamla.
+3. Google hesabınla oturum aç.
+
+**CLI kurulumu:**
+
+```bash
+# npm ile global kurulum
+npm install -g @google/antigravity-cli
+
+# Versiyon doğrula
+antigravity --version
+
+# Oturum aç
+antigravity auth login
+```
+
+**Python SDK:**
+
+```bash
+pip install google-antigravity python-dotenv
+```
+
+---
+
+## Adım 3 — Plan Mode kullanımı
+
+Plan Mode, Antigravity'nin görevi çalıştırmadan önce adım adım planladığı ve onay beklediği moddur. Büyük, geri alınamaz görevler için idealdir.
+
+GUI'de Plan Mode:
+
+1. Agent Manager uygulamasını aç.
+2. Görev girişinin yanındaki **"Plan"** düğmesine tıkla.
+3. Antigravity planı gösterir — adımları inceleyip düzelt veya onayla.
+4. **"Çalıştır"** ile görevi başlat.
+
+CLI'de Plan Mode:
+
+```bash
+# Plan üret, onay bekle
+antigravity plan "src/ dizinindeki tüm async fonksiyonları tespit et ve timeout ekle"
+
+# Planı dosyaya kaydet
+antigravity plan "veritabanı şemasını güncelle" --output plan.json
+
+# Kaydedilen planı çalıştır
+antigravity execute --plan plan.json
+```
+
+Fast Mode (hızlı, onaysız):
+
+```bash
+# Küçük, güvenli görevler için
+antigravity run --fast "tüm print() ifadelerini logging.info() ile değiştir"
+```
+
+---
+
+## Adım 4 — Antigravity SDK ile Python agent
+
+```python
+# antigravity_agent.py
+import asyncio
+import os
+from dotenv import load_dotenv
+from google.antigravity import AgentClient, AgentConfig, Tool
+
+load_dotenv()
+
+# Agent yapılandırması
+konfig = AgentConfig(
+    model="gemini-3-pro",          # Varsayılan model
+    fallback_model="claude-sonnet-4-5",  # Yedek model
+    max_turns=10,
+    plan_mode=True,                # Büyük görevlerde plan iste
+    workspace_path="./calisma"
+)
+
+# Özel araç tanımlama
+@Tool.define(
+    name="dosya_ozetle",
+    description="Belirtilen dosyanın içeriğini özetler."
+)
+async def dosya_ozetle(dosya_yolu: str) -> str:
+    from pathlib import Path
+    yol = Path(dosya_yolu)
+    if not yol.exists():
+        return f"Hata: '{dosya_yolu}' bulunamadı."
+    icerik = yol.read_text(encoding="utf-8")
+    return f"Dosya: {yol.name}\nBoyut: {len(icerik)} karakter\nİlk 200 karakter:\n{icerik[:200]}"
+
+async def main():
+    async with AgentClient(config=konfig) as agent:
+        # Araçları kaydet
+        agent.register_tool(dosya_ozetle)
+
+        # Görev ver
+        sonuc = await agent.run(
+            "src/ dizinindeki tüm Python dosyalarını özetle ve "
+            "hangisinin en karmaşık olduğuna karar ver.",
+            stream=True  # Adımları canlı izle
+        )
+
+        async for adim in sonuc:
+            print(f"[{adim.type}] {adim.content}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+---
+
+## Adım 5 — Kendi MCP sunucusunu Antigravity'ye bağla
+
+Antigravity, MCP protokolünü destekler. Modül 06'da yazdığın sunucuyu bağlamak için:
+
+**GUI ile:**
+
+1. Antigravity IDE aç → Ayarlar → MCP Sunucuları
+2. "Sunucu Ekle" → "stdio" türünü seç
+3. Komut: `python` | Argümanlar: `C:/projeler/mcp-sunucu/sunucu.py`
+4. Kaydet ve yeniden başlat.
+
+**CLI ile (antigravity.yaml):**
+
+```yaml
+# antigravity.yaml (proje kökü)
+mcp_servers:
+  - name: benim-arac-sunucum
+    transport: stdio
+    command: python
+    args:
+      - /tam/yol/sunucu.py
+    env: {}
+
+  - name: veritabani-araclari
+    transport: http
+    url: http://localhost:8080/mcp
+    headers:
+      Authorization: "Bearer ${MCP_TOKEN}"
+
+model:
+  primary: gemini-3-pro
+  fallback: claude-sonnet-4-5
+
+workspace:
+  allow_paths:
+    - src/
+    - tests/
+  deny_paths:
+    - .env
+    - secrets/
+```
+
+---
+
+## Adım 6 — Tarayıcı kontrolü (Browser Control)
+
+Antigravity'nin güçlü özelliklerinden biri yerleşik tarayıcı kontrolüdür:
+
+```python
+# tarayici_agent.py
+from google.antigravity import AgentClient, AgentConfig, BrowserConfig
+
+konfig = AgentConfig(
+    model="gemini-3-pro",
+    browser=BrowserConfig(
+        headless=False,      # Tarayıcıyı görünür aç
+        viewport=(1280, 800),
+        timeout=30
+    )
+)
+
+async def main():
+    async with AgentClient(config=konfig) as agent:
+        # Tarayıcıyı kullanarak web görevleri
+        sonuc = await agent.run(
+            "https://haber-sitesi.com adresine git, "
+            "günün en çok okunan 5 haberinin başlığını al "
+            "ve bana JSON formatında ver."
+        )
+        print(sonuc.final_output)
+```
+
+<Callout type="uyari">
+Tarayıcı kontrolü, kullanıcı adı/şifre gerektiren sayfalarda oturum bilgilerini paylaşmana yol açabilir. Hassas sitelerde kullanmadan önce güvenlik politikasını gözden geçir.
+</Callout>
+
+---
+
+## Adım 7 — Bilgi tabanı (Knowledge Base) kullanımı
+
+Antigravity'nin yerleşik bilgi tabanı, agent'ın öğrendiklerini oturumlar arasında saklar:
+
+```python
+from google.antigravity import AgentClient, AgentConfig, KnowledgeBase
+
+kb = KnowledgeBase(
+    path="./bilgi-tabani",
+    auto_learn=True,   # Agent çözüm bulunca otomatik kaydet
+    max_entries=1000
+)
+
+konfig = AgentConfig(
+    model="gemini-3-pro",
+    knowledge_base=kb
+)
+
+async def main():
+    async with AgentClient(config=konfig) as agent:
+        # İlk çalıştırmada öğrenir
+        await agent.run("Bu projede hata ayıklamak için hangi yaklaşımlar işe yarıyor?")
+
+        # İkinci çalıştırmada bilgi tabanından yararlanır
+        await agent.run("Bir önceki hata ayıklama oturumunda ne öğrendi?")
+```
+
+---
+
+## Egzersiz
+
+Aşağıdaki Antigravity agent'ını yaz:
+
+1. `./belgeler` klasöründeki tüm `.md` dosyalarını tara.
+2. Her dosyanın başlığını ve kelime sayısını çıkar.
+3. Sonuçları `özet.json` dosyasına kaydet.
+4. Plan Mode'u açık bırak ve planı terminalden onayla.
+
+<details>
+<summary>Çözüm (tıkla)</summary>
+
+```python
+# belge_analiz.py
+import asyncio
+import json
+from pathlib import Path
+from google.antigravity import AgentClient, AgentConfig, Tool
+
+konfig = AgentConfig(
+    model="gemini-3-pro",
+    plan_mode=True,
+    workspace_path="."
+)
+
+@Tool.define(name="md_dosyalarini_tara", description="Belirtilen klasördeki tüm .md dosyalarını analiz eder.")
+async def md_dosyalarini_tara(klasor_yolu: str) -> str:
+    klasor = Path(klasor_yolu)
+    if not klasor.exists():
+        return f"Klasör bulunamadı: {klasor_yolu}"
+
+    sonuclar = []
+    for dosya in klasor.glob("*.md"):
+        icerik = dosya.read_text(encoding="utf-8")
+        satirlar = icerik.splitlines()
+        baslik = next((s.lstrip("#").strip() for s in satirlar if s.startswith("#")), dosya.stem)
+        kelime_sayisi = len(icerik.split())
+        sonuclar.append({"dosya": dosya.name, "baslik": baslik, "kelime_sayisi": kelime_sayisi})
+
+    return json.dumps(sonuclar, ensure_ascii=False, indent=2)
+
+@Tool.define(name="json_kaydet", description="Veriyi JSON dosyasına kaydeder.")
+async def json_kaydet(dosya_adi: str, icerik: str) -> str:
+    Path(dosya_adi).write_text(icerik, encoding="utf-8")
+    return f"Kaydedildi: {dosya_adi}"
+
+async def main():
+    async with AgentClient(config=konfig) as agent:
+        agent.register_tool(md_dosyalarini_tara)
+        agent.register_tool(json_kaydet)
+
+        sonuc = await agent.run(
+            "./belgeler klasöründeki tüm .md dosyalarını tara, "
+            "başlıklarını ve kelime sayılarını çıkar, "
+            "sonuçları özet.json olarak kaydet."
+        )
+        print(sonuc.final_output)
+
+asyncio.run(main())
+```
+
+</details>
+
+---
+
+## Sonraki: [Modül 09 — Multi-Model Orkestrasyon](/modul/09-multi-model-orkestrasyon)
+
+Son modülde birden fazla modeli maliyet ve kalite dengesini gözeterek bir araya getiren orkestrasyon sistemini öğreneceksin.

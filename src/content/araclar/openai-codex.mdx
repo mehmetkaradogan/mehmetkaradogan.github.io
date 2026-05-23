@@ -1,0 +1,212 @@
+---
+title: "OpenAI Codex (2026)"
+slug: openai-codex
+category: araclar
+level: orta
+summary: "OpenAI'ın 2026 computer-use yetenekli kodlama ajanı; ekran görerek, tıklayarak ve terminalde çalışarak yazılım geliştirir."
+updated: 2026-05-23
+tags: ["agentic-cli", "openai", "computer-use", "kodlama"]
+related: ["claude-code", "google-antigravity", "openai-agents-sdk"]
+vendor: "OpenAI"
+toolType: "agentic-cli"
+license: "Proprietary"
+os: ["macOS", "Linux", "Windows"]
+primary_model: "GPT-4o / o3"
+last_review: 2026-05-23
+status: "active"
+---
+
+## Nedir?
+
+OpenAI Codex, 2026 yılında bilgisayar kullanımı (computer use) yetenekleriyle yeniden tasarlanan OpenAI'ın agentic kodlama aracıdır. 2021'deki orijinal Codex modelinden farklı olarak bu sürüm; ekranı görebilen, uygulamalar üzerinde tıklayıp yazabilen, terminali çalıştırabilen ve web tarayıcısında gezinebilen tam kapsamlı bir yazılım geliştirme ajanıdır (software development agent). OpenAI Agents SDK ile entegre çalışır ve ChatGPT'nin "Codex" ajanı arayüzünden de erişilebilir.
+
+<Callout type="not">
+Bu sayfa 2026 Codex sürümünü ele almaktadır. 2021'deki "Codex API" (kod tamamlama modeli) artık kullanımda değildir ve bu araçla ilgisi yoktur.
+</Callout>
+
+## Ne için iyi
+
+- Ekran tabanlı (computer use) görevler: GUI uygulamasını açıp formları doldurma, Figma'dan kodu export etme.
+- Web tarayıcısı üzerinden araştırma yapıp koda dönüştürme.
+- Yapılandırılmış araç çağırımı (structured tool calling) gerektiren karmaşık iş akışları.
+- OpenAI ekosistemine entegre projeler: Assistants v2, Function calling, GPT Action'lar.
+- Bir yazılım projesinin kurulumundan dağıtımına (deployment) kadar uçtan uca otomasyon.
+- ChatGPT arayüzü üzerinden erişim tercih eden ekipler için düşük sürtünmeli başlangıç.
+
+## Ne için kötü
+
+- Anthropic ekosistemi veya Claude modelleriyle çalışan projeler.
+- Çevrimdışı (offline) veya tam yerel (fully local) çalışma gereksinimleri.
+- Çok düşük gecikme (low-latency) gerektiren gerçek zamanlı uygulamalar.
+- Kod tabanı ağırlıklı Terminal-first iş akışları — Claude Code bu senaryoda daha ergonomiktir.
+- Computer use özelliği sandbox ortamda çalışır; üretim sistemlerinde doğrudan masaüstü kontrolü risklidir.
+
+## Kurulum
+
+```bash
+# OpenAI Agents SDK aracılığıyla Codex ajanı kurulumu
+pip install openai-agents
+
+# API anahtarını ayarla
+export OPENAI_API_KEY="sk-proj-..."
+
+# Codex CLI aracını kur (opsiyonel, doğrudan terminal kullanımı için)
+npm install -g @openai/codex-cli
+```
+
+<Callout type="ipucu">
+Codex'e ChatGPT arayüzünden de erişebilirsiniz: ChatGPT'yi açın, "Codex" ajanını seçin ve doğal dilde görev tanımlayın. CLI kurulumu gerekmez.
+</Callout>
+
+## İlk çalıştırma
+
+```python
+# openai-agents SDK ile Codex ajanı başlatma
+from openai_agents import Agent, ComputerUseTool, CodeInterpreterTool
+
+codex_agent = Agent(
+    name="Codex",
+    model="gpt-4o",
+    tools=[
+        ComputerUseTool(),      # Ekran görme ve kontrol
+        CodeInterpreterTool(),  # Kod çalıştırma
+    ],
+    instructions="Sen bir yazılım geliştirme ajanısın. "
+                 "Görevleri adım adım planla ve doğrula."
+)
+
+result = codex_agent.run(
+    "Bir Flask REST API iskelet projesi oluştur, "
+    "Docker dosyası ekle, README yaz."
+)
+print(result.output)
+```
+
+## Senaryolar
+
+### 1) Computer Use ile GUI Otomasyonu
+
+```python
+from openai_agents import Agent, ComputerUseTool
+
+agent = Agent(
+    model="gpt-4o",
+    tools=[ComputerUseTool(sandbox=True)]
+)
+
+# Figma'dan tasarımı dışa aktarıp koda dönüştürme
+result = agent.run(
+    "Figma'yı aç, 'Login Sayfası' çerçevesini bul, "
+    "dışa aktar ve React bileşeni olarak kodla."
+)
+```
+
+### 2) Web Araştırmasından Koda
+
+```python
+# Codex ajanı web'de araştırma yapıp kod üretir
+result = codex_agent.run(
+    "PyPI'da 'fastapi' paketinin son 3 sürümünün değişiklik günlüğünü (changelog) oku, "
+    "kırılma değişikliklerini (breaking change) tespit et, "
+    "projemizi güncellemek için migration kılavuzu yaz."
+)
+```
+
+### 3) Uçtan Uca Proje Kurulumu
+
+```bash
+# Codex CLI ile
+codex "Yeni bir Next.js 15 projesi başlat: \
+TypeScript, Tailwind CSS, shadcn/ui, Prisma ORM, \
+PostgreSQL bağlantısı, auth için NextAuth v5. \
+Her şeyi yapılandır, .env.example hazırla."
+```
+
+Codex, terminalde komutları sırayla çalıştırır, hataları algılar ve düzeltir.
+
+## Diğer araçlarla
+
+**OpenAI Agents SDK ile:** Codex, [OpenAI Agents SDK](/araclar/openai-agents-sdk) tarafından yönetilen çok ajanlı (multi-agent) sistemlerde uzman bir "geliştirici ajanı" rolü üstlenebilir. Orkestratör ajan görev dağıtır, Codex kodu yazar.
+
+**GitHub Actions ile:** OpenAI API token'ı gizli değişken (secret) olarak ekleyip CI pipeline'a entegre edilebilir:
+
+```yaml
+- name: Codex Code Review
+  env:
+    OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  run: codex --print "Bu commit'teki güvenlik açıklarını raporla"
+```
+
+**Assistants v2 ile:** Codex ajanı, kalıcı iş parçacığı (persistent thread) ve dosya yönetimi için Assistants v2 API'siyle birlikte çalışır.
+
+**Function Calling ile:** [Fonksiyon çağırımı](/kavramlar/function-calling) aracılığıyla Stripe, Twilio, SendGrid gibi harici API'lere bağlanır.
+
+## Yaygın hatalar ve çözümleri
+
+<details>
+<summary>Computer use sandbox dışına çıkamıyor</summary>
+
+Computer use özelliği güvenlik nedeniyle sandbox ortamında çalışır. Üretim sistemine doğrudan erişim için MCP sunucusu veya API entegrasyonu tercih edin. Sandbox'tan dosya aktarmak için `ComputerUseTool(output_dir="./output")` parametresini kullanın.
+
+</details>
+
+<details>
+<summary>Model rate limit (hız sınırı) aşıldı</summary>
+
+```python
+# Üstel geri çekilme (exponential backoff) ile yeniden dene
+import time
+from openai import RateLimitError
+
+def run_with_retry(agent, prompt, max_retries=3):
+    for attempt in range(max_retries):
+        try:
+            return agent.run(prompt)
+        except RateLimitError:
+            wait = 2 ** attempt
+            time.sleep(wait)
+    raise Exception("Rate limit aşıldı, daha sonra tekrar deneyin.")
+```
+
+</details>
+
+<details>
+<summary>Codex CLI komutu bulunamıyor (command not found)</summary>
+
+```bash
+# Node.js sürümünü kontrol edin (18+ gerekli)
+node --version
+
+# Global npm paketlerini yenile
+npm install -g @openai/codex-cli --force
+
+# PATH kontrolü
+echo $PATH | grep npm
+```
+
+</details>
+
+## Maliyet / limit
+
+<Callout type="uyari">
+Computer use özelliği ekran görüntüsü (screenshot) tabanlıdır ve her adımda görüntü işleme maliyeti ekler. Uzun GUI otomasyon oturumları beklenenden yüksek maliyet üretebilir. Görev başlamadan önce adım sayısını sınırlayan talimatlar verin.
+</Callout>
+
+- **Model maliyeti:** GPT-4o veya o3 ile çalışır; computer use adımları başına ek görüntü token'ı hesaplanır.
+- **Sandbox sınırı:** Aylık belirli saat veya eylem sayısı sınırı; ChatGPT Pro aboneliğinde daha yüksek kota.
+- **Token optimizasyonu:** Uzun oturumları parçalara bölün; her oturum için net bir bitiş kriteri (success criterion) tanımlayın.
+- **Paralel ajan maliyeti:** Birden fazla Codex ajanı paralel çalıştırmak maliyeti doğrusal olarak artırır. Bkz. [maliyet stratejileri](/kavramlar/agent-orchestration).
+
+## Karşılaştırma
+
+[Claude Code vs Codex vs Antigravity](/karsilastirmalar/claude-code-vs-codex-vs-antigravity)
+
+[Hangi araç ne zaman?](/karsilastirmalar/hangi-arac-ne-zaman)
+
+## Daha fazla
+
+- [OpenAI Codex resmi duyurusu](https://openai.com/codex) — OpenAI
+- [OpenAI Agents SDK dokümantasyonu](https://platform.openai.com/docs/agents) — OpenAI Platform
+- [Computer Use kılavuzu](https://platform.openai.com/docs/computer-use) — OpenAI Platform
+- [OpenAI Agents SDK](/araclar/openai-agents-sdk) — Bu sitede
+- [Function calling kavramı](/kavramlar/function-calling) — Bu sitede

@@ -1,0 +1,274 @@
+---
+title: "LangGraph"
+slug: langgraph
+category: araclar
+level: ileri
+summary: "LangChain ekosisteminin üretim kaliteli çoklu ajan çerçevesi; durum kalıcılığı, kontrol edilebilir graf yapısı ve LangSmith gözlemlenebilirliğiyle üretim ortamlarının tercihi."
+updated: 2026-05-23
+tags: ["framework", "multi-agent", "langchain", "state-machine", "üretim"]
+related: ["crewai", "autogen", "claude-agent-sdk"]
+vendor: "LangChain, Inc."
+toolType: "framework"
+license: "MIT (açık kaynak)"
+os: ["macOS", "Linux", "Windows"]
+primary_model: "Model bağımsız (Claude, GPT, Gemini, Llama)"
+last_review: 2026-05-23
+status: "active"
+---
+
+## Nedir?
+
+LangGraph, LangChain ekosisteminin üretim kaliteli çoklu ajan orkestrasyon çerçevesidir (multi-agent orchestration framework). Ajan iş akışlarını yönlendirilmiş döngüsel graf (directed cyclic graph) olarak modellemek yerine; **durumlu (stateful)**, kontrol edilebilir ve gözlemlenebilir bir yapı sunar. Her düğüm (node) bir ajan ya da fonksiyon, her kenar (edge) ise bir karar noktası veya geçiş kuralıdır. LangSmith entegrasyonuyla her ajan adımı izlenebilir (tracing), değerlendirilebilir (eval) ve hata ayıklanabilir (debug). BlackRock ve JPMorgan gibi finans kurumlarının üretim sistemleri dahil 2026 itibarıyla en yaygın kullanılan üretim ajan çerçevesidir.
+
+## Ne için iyi
+
+- **Üretim ortamları:** Kesintiye dayanıklı (durable), yeniden başlatılabilir (resumable) uzun süren görevler.
+- **Durum kalıcılığı (state persistence):** Graf durumunu veritabanına checkpoint ile kaydetme; ajan çöktükten sonra kaldığı yerden devam etme.
+- **Karmaşık kontrol akışı:** Koşullu kenarlar (conditional edge), döngüler, paralel dallar.
+- **İnsan-döngüde (HITL):** Kritik adımlarda onay bekleme noktaları (interrupt).
+- **Gözlemlenebilirlik (observability):** LangSmith ile her token, her araç çağrısı, her ajan geçişi izlenir.
+- **Çoklu model mimarisi:** Farklı düğümlere farklı modeller atanabilir (review = Sonnet, planner = Opus).
+- **Düzenleyici (regulatory) uyum gerektiren sektörler:** Finans, sağlık — denetim izi (audit trail) için ideal.
+
+## Ne için kötü
+
+- **Hızlı prototipleme:** LangGraph'ın öğrenme eğrisi yüksektir; CrewAI bir günde prototip için daha uygundur.
+- **Basit tek ajan görevleri:** Graph yapısı overkill olabilir.
+- **No-code/low-code ihtiyaçları:** n8n veya Make daha uygun.
+- **LangChain ekosistemi dışı:** LangSmith'siz gözlemlenebilirlik kurulumu ek çaba gerektirir.
+
+## Kurulum
+
+```bash
+# Python 3.11+ önerilir
+pip install langgraph
+
+# LangSmith gözlemlenebilirliği için (şiddetle önerilir)
+pip install langsmith
+
+# LLM entegrasyonları
+pip install langchain-anthropic   # Claude için
+pip install langchain-openai      # GPT için
+pip install langchain-google-genai  # Gemini için
+
+# Ortam değişkenleri
+export LANGSMITH_API_KEY="ls__..."
+export ANTHROPIC_API_KEY="sk-ant-..."
+```
+
+<Callout type="info">
+LangSmith kurulmadan LangGraph kullanılabilir ancak üretim ortamında gözlemlenebilirlik olmadan hata ayıklamak çok zorlaşır. LangSmith ücretsiz katman bireysel kullanım için yeterlidir.
+</Callout>
+
+## İlk çalıştırma
+
+```python
+from langgraph.graph import StateGraph, END
+from langchain_anthropic import ChatAnthropic
+from typing import TypedDict, Annotated
+import operator
+
+# 1. Ajan durumunu tanımla
+class AgentState(TypedDict):
+    messages: Annotated[list, operator.add]
+    next_step: str
+
+# 2. Modeli başlat
+model = ChatAnthropic(model="claude-sonnet-4-5")
+
+# 3. Düğüm fonksiyonları
+def planner(state: AgentState) -> AgentState:
+    response = model.invoke(state["messages"])
+    return {"messages": [response], "next_step": "executor"}
+
+def executor(state: AgentState) -> AgentState:
+    # Görevi yürüt
+    return {"messages": [], "next_step": END}
+
+# 4. Graf oluştur
+graph = StateGraph(AgentState)
+graph.add_node("planner", planner)
+graph.add_node("executor", executor)
+graph.set_entry_point("planner")
+graph.add_edge("planner", "executor")
+graph.add_edge("executor", END)
+
+# 5. Derle ve çalıştır
+app = graph.compile()
+result = app.invoke({"messages": [("human", "Merhaba, bir görev planla.")]})
+print(result)
+```
+
+## Senaryolar
+
+### 1) Checkpoint ile Kesintiye Dayanıklı Ajan
+
+```python
+from langgraph.graph import StateGraph
+from langgraph.checkpoint.sqlite import SqliteSaver
+
+# SQLite checkpoint — veritabanına durum kaydet
+memory = SqliteSaver.from_conn_string("checkpoints.db")
+
+graph = StateGraph(AgentState)
+# ... düğüm ekle
+
+# Checkpoint ile derle
+app = graph.compile(checkpointer=memory)
+
+# Benzersiz iş parçacığı kimliği ile çalıştır
+config = {"configurable": {"thread_id": "gorev-001"}}
+result = app.invoke(initial_state, config=config)
+
+# Sistem çöktükten sonra kaldığı yerden devam et
+result = app.invoke(None, config=config)  # None = kaldığı yerden başla
+```
+
+### 2) Koşullu Kenar ile Yönlendirme
+
+```python
+def route_after_check(state: AgentState) -> str:
+    """Kalite kontrole göre yönlendir."""
+    if state["quality_score"] >= 0.8:
+        return "publish"
+    elif state["retry_count"] < 3:
+        return "revise"
+    else:
+        return "escalate_to_human"
+
+graph.add_conditional_edges(
+    "quality_checker",
+    route_after_check,
+    {
+        "publish": "publisher",
+        "revise": "writer",
+        "escalate_to_human": "human_review"
+    }
+)
+```
+
+### 3) İnsan-Döngüde (HITL) Onay Noktası
+
+```python
+from langgraph.graph import interrupt
+
+def critical_action(state: AgentState) -> AgentState:
+    # Kritik adımda dur ve insan onayı iste
+    human_approval = interrupt({
+        "action": "Veritabanını sil",
+        "reason": state["deletion_reason"],
+        "confirm": "Bu işlem geri alınamaz. Onaylıyor musunuz?"
+    })
+
+    if human_approval["approved"]:
+        # Silme işlemini yürüt
+        perform_deletion(state["target"])
+
+    return state
+
+# Graf insan onayı bekleyene kadar duraklar,
+# API ile onay verildikten sonra devam eder.
+```
+
+## Diğer araçlarla
+
+**LangSmith ile:** LangGraph'ın doğal tamamlayıcısı. Her çalışma otomatik olarak izlenir, görselleştirilir ve karşılaştırılabilir. `LANGSMITH_TRACING=true` ortam değişkeni yeterli.
+
+**MCP protokolüyle:** LangGraph düğümleri, [MCP protokolü](/kavramlar/mcp-protokol) üzerinden harici araçlara bağlanabilir:
+
+```python
+from langchain_mcp_adapters import MCPToolkit
+
+mcp_tools = MCPToolkit(server_url="http://localhost:3000")
+# Araçları LangGraph düğümüne ekle
+```
+
+**Claude Agent SDK ile:** LangGraph orkestrasyonu Claude Agent SDK'daki subagent'larla birleştirilebilir — LangGraph genel iş akışını yönetir, Claude Code alt görevleri çalıştırır.
+
+**PostgreSQL ile:** Üretim checkpoint deposu için SQLite yerine PostgreSQL kullanın:
+
+```python
+from langgraph.checkpoint.postgres import PostgresSaver
+memory = PostgresSaver.from_conn_string(os.getenv("DATABASE_URL"))
+```
+
+## Yaygın hatalar ve çözümleri
+
+<details>
+<summary>Sonsuz döngü (infinite loop) — ajan durmuyor</summary>
+
+```python
+# Maksimum adım sayısı sınırı ekle
+app = graph.compile(checkpointer=memory)
+result = app.invoke(
+    initial_state,
+    config={"recursion_limit": 25}  # Varsayılan 25, azaltabilirsiniz
+)
+```
+
+</details>
+
+<details>
+<summary>Durum şeması uyuşmazlığı (TypeError: missing key)</summary>
+
+TypedDict tanımındaki tüm anahtarların düğüm dönüş değerlerinde mevcut olduğundan emin olun. Opsiyonel alanlar için `Optional[str] = None` kullanın.
+
+</details>
+
+<details>
+<summary>Checkpoint veritabanı kilitli (database locked)</summary>
+
+SQLite eş zamanlı yazma işlemlerinde kilitlenebilir. Üretimde PostgreSQL kullanın:
+
+```bash
+pip install langgraph-checkpoint-postgres
+```
+
+</details>
+
+<details>
+<summary>LangSmith trace'ler görünmüyor</summary>
+
+```bash
+# Gerekli ortam değişkenlerini kontrol et
+echo $LANGSMITH_API_KEY
+echo $LANGSMITH_PROJECT  # opsiyonel, proje adı
+
+# Kod içinde etkinleştir
+import os
+os.environ["LANGSMITH_TRACING"] = "true"
+```
+
+</details>
+
+## Maliyet / limit
+
+<Callout type="uyari">
+Her graf düğüm geçişinde model çağrısı olabilir. Karmaşık graflarda bir kullanıcı görevi onlarca model çağrısına dönüşebilir. Pahalı modelleri (Opus 4, Gemini 3 Pro) yalnızca planlama düğümlerine atayın; yürütme ve inceleme düğümleri için Sonnet veya Haiku kullanın.
+</Callout>
+
+- **LangSmith ücretsiz katman:** Aylık 5,000 iz (trace) ücretsiz; bireysel kullanım için yeterli.
+- **LangSmith Developer/Plus:** Aylık sabit ücretle yüksek iz kotası ve takım özelikleri.
+- **Model maliyet optimizasyonu:** Farklı düğümlere farklı modeller atayarak önemli tasarruf:
+  ```python
+  planner_model = ChatAnthropic(model="claude-opus-4")    # Pahalı, akıllı
+  executor_model = ChatAnthropic(model="claude-haiku-3")  # Ucuz, hızlı
+  ```
+- **Self-host seçeneği:** LangGraph Server açık kaynak; kendi altyapınızda çalıştırabilirsiniz.
+
+## Karşılaştırma
+
+[LangGraph vs CrewAI vs AutoGen](/karsilastirmalar/langgraph-vs-crewai-vs-autogen)
+
+[Framework seçim rehberi](/karsilastirmalar/framework-secim-rehberi)
+
+[Hangi araç ne zaman?](/karsilastirmalar/hangi-arac-ne-zaman)
+
+## Daha fazla
+
+- [LangGraph resmi dokümantasyonu](https://langchain-ai.github.io/langgraph/) — LangChain
+- [LangGraph GitHub](https://github.com/langchain-ai/langgraph) — Açık kaynak
+- [LangSmith](https://smith.langchain.com) — Gözlemlenebilirlik platformu
+- [LangChain Discord](https://discord.gg/langchain) — Topluluk
+- [Modül 04: LangGraph ile İlk Agent](/modul/04-langgraph-baslangic) — Bu sitede
+- [Checkpoint ve durum yönetimi](/kavramlar/agent-orchestration) — Bu sitede

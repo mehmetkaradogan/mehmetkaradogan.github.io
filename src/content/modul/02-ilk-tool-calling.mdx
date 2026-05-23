@@ -1,0 +1,357 @@
+---
+title: "İlk Tool Calling: Araç Tanımlama ve Döngüsü"
+slug: 02-ilk-tool-calling
+category: modul
+level: giris
+summary: "Anthropic SDK ile araç tanımlama (tool definition), araç çağrısı döngüsü (tool call loop) ve gerçek bir hesap makinesi aracının adım adım uygulaması."
+updated: 2026-05-23
+tags: [tool-use, function-calling, anthropic, sdk, giris]
+related: [01-temeller, 03-rag-kurulumu, 04-langgraph-baslangic]
+modul: "02"
+sure: "75 dakika"
+onkosul: ["01-temeller"]
+ciktilar:
+  - "JSON şemasıyla araç tanımlayabilme"
+  - "Araç çağrısı döngüsünü (tool call loop) elle uygulayabilme"
+  - "Birden fazla araç arasında seçim yapan bir agent yazabilme"
+---
+
+## Hedef
+
+Bu modülün sonunda Anthropic SDK'nın araç kullanımı (tool use) mekanizmasını tam olarak anlayacak ve kendi araçlarını tanımlayan, çağıran, sonuçları işleyen bir agent döngüsü yazabileceksin.
+
+## Önkoşullar
+
+- [Modül 01 — Temeller](/modul/01-temeller) tamamlandı
+- `anthropic` ve `python-dotenv` yüklü, `.env` yapılandırıldı
+
+## Öğrenme çıktıları
+
+1. `input_schema` ile JSON şeması yazabilirsin.
+2. Modelden gelen `tool_use` bloğunu ayrıştırıp (parse) ilgili Python fonksiyonunu çağırabilirsin.
+3. `tool_result` mesajını döngüye dahil edip modelin nihai yanıtını alabilirsin.
+4. İki veya daha fazla araçla çalışan bir agent yazabilirsin.
+
+---
+
+## Adım 1 — Tool calling nasıl çalışır?
+
+Araç çağrısı (tool calling / function calling) üç aşamalıdır:
+
+```
+1. Sen araçları tanımlarsın (JSON şeması ile)
+          │
+          ▼
+2. Model "bu aracı çağır" yanıtı üretir (tool_use bloğu)
+          │
+          ▼
+3. Sen aracı çalıştırırsın ve sonucu modele geri gönderirsin (tool_result)
+          │
+          ▼
+4. Model nihai yanıtı üretir
+```
+
+Bu döngü birden fazla kez tekrarlayabilir — modelin ihtiyaç duyduğu tüm araçları kullanana kadar.
+
+---
+
+## Adım 2 — İlk araç tanımı
+
+Basit bir hesap makinesi aracı tanımlayalım:
+
+```python
+# tools.py
+hesap_makinesi_araci = {
+    "name": "hesap_makinesi",
+    "description": (
+        "İki sayı arasında matematiksel işlem yapar. "
+        "Toplama, çıkarma, çarpma, bölme desteklenir."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "sayi1": {
+                "type": "number",
+                "description": "Birinci sayı"
+            },
+            "sayi2": {
+                "type": "number",
+                "description": "İkinci sayı"
+            },
+            "islem": {
+                "type": "string",
+                "enum": ["topla", "cikar", "carp", "bol"],
+                "description": "Yapılacak matematiksel işlem"
+            }
+        },
+        "required": ["sayi1", "sayi2", "islem"]
+    }
+}
+```
+
+---
+
+## Adım 3 — Aracın Python uygulaması
+
+```python
+# araçlar.py
+def hesap_makinesi(sayi1: float, sayi2: float, islem: str) -> str:
+    if islem == "topla":
+        sonuc = sayi1 + sayi2
+    elif islem == "cikar":
+        sonuc = sayi1 - sayi2
+    elif islem == "carp":
+        sonuc = sayi1 * sayi2
+    elif islem == "bol":
+        if sayi2 == 0:
+            return "Hata: Sıfıra bölme yapılamaz."
+        sonuc = sayi1 / sayi2
+    else:
+        return f"Hata: Bilinmeyen işlem '{islem}'"
+    return str(sonuc)
+```
+
+---
+
+## Adım 4 — Tam araç çağrısı döngüsü
+
+```python
+import os
+import json
+from dotenv import load_dotenv
+import anthropic
+
+load_dotenv()
+client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+
+# Araç tanımı (Adım 2'den)
+ARACLAR = [hesap_makinesi_araci]
+
+# Araç → Python fonksiyon eşlemesi
+ARACI_CALISTIR = {
+    "hesap_makinesi": hesap_makinesi
+}
+
+def agent_dongusu(kullanici_sorusu: str) -> str:
+    mesajlar = [{"role": "user", "content": kullanici_sorusu}]
+
+    while True:
+        yanit = client.messages.create(
+            model="claude-sonnet-4-5",
+            max_tokens=1024,
+            tools=ARACLAR,
+            messages=mesajlar
+        )
+
+        # Model nihai yanıt verdiyse döngüden çık
+        if yanit.stop_reason == "end_turn":
+            return yanit.content[0].text
+
+        # Model araç çağırmak istiyor
+        if yanit.stop_reason == "tool_use":
+            # Asistan yanıtını mesaj geçmişine ekle
+            mesajlar.append({"role": "assistant", "content": yanit.content})
+
+            # Her tool_use bloğunu işle
+            arac_sonuclari = []
+            for blok in yanit.content:
+                if blok.type == "tool_use":
+                    araci_calistir = ARACI_CALISTIR.get(blok.name)
+                    if araci_calistir:
+                        sonuc = araci_calistir(**blok.input)
+                    else:
+                        sonuc = f"Hata: '{blok.name}' aracı bulunamadı."
+
+                    arac_sonuclari.append({
+                        "type": "tool_result",
+                        "tool_use_id": blok.id,
+                        "content": sonuc
+                    })
+
+            # Araç sonuçlarını mesaj geçmişine ekle
+            mesajlar.append({"role": "user", "content": arac_sonuclari})
+
+# Test et
+if __name__ == "__main__":
+    soru = "237 ile 489'u topla, sonra 3'e böl."
+    print(agent_dongusu(soru))
+```
+
+Beklenen çıktı:
+
+```
+237 ile 489'un toplamı 726'dır. 726'yı 3'e böldüğünüzde sonuç 242.0 elde edilir.
+```
+
+<Callout type="ipucu">
+`stop_reason` değerini her zaman kontrol et. `tool_use` dışında `max_tokens` veya `stop_sequence` gibi değerler de gelebilir — bunlar hata değil, döngüyü sonlandırma sinyali.
+</Callout>
+
+---
+
+## Adım 5 — İkinci araç ekleme
+
+Şimdi bir de tarih/saat aracı ekleyelim:
+
+```python
+from datetime import datetime
+
+bugun_araci = {
+    "name": "bugun_tarihi",
+    "description": "Bugünün tarihini ve saatini döner.",
+    "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+    }
+}
+
+def bugun_tarihi() -> str:
+    simdi = datetime.now()
+    return simdi.strftime("%d %B %Y, %H:%M")
+
+# ARACLAR listesine ekle
+ARACLAR = [hesap_makinesi_araci, bugun_araci]
+
+# ARACI_CALISTIR sözlüğüne ekle
+ARACI_CALISTIR = {
+    "hesap_makinesi": hesap_makinesi,
+    "bugun_tarihi": bugun_tarihi
+}
+```
+
+Test:
+
+```python
+print(agent_dongusu("Bugün hangi gün? Ve 2024 ile 1453'ün farkı nedir?"))
+```
+
+Model artık iki aracı arka arkaya veya aynı turda çağırabilir. Anthropic SDK, model tek mesajda birden fazla araç çağırdığında `yanit.content` listesinde birden fazla `tool_use` bloğu döner — döngü bunu zaten işler.
+
+---
+
+## Adım 6 — Hata yönetimi
+
+Araç çağrılarında hata oluşabilir. Sağlam bir yapı için:
+
+```python
+arac_sonuclari.append({
+    "type": "tool_result",
+    "tool_use_id": blok.id,
+    "content": sonuc,
+    "is_error": isinstance(sonuc, str) and sonuc.startswith("Hata:")
+})
+```
+
+<Callout type="uyari">
+`is_error: True` gönderildiğinde model hatayı fark edip farklı parametrelerle yeniden deneyebilir veya kullanıcıya açıklama yapabilir. Bu, yansıma (reflection) döngüsünün en basit biçimidir.
+</Callout>
+
+---
+
+## Egzersiz
+
+Aşağıdaki üç aracı tanımla ve tam döngüyle çalışan bir agent yaz:
+
+1. `kelime_say(metin: str) -> int` — verilen metnin kelime sayısını döner.
+2. `buyuk_harf(metin: str) -> str` — metni büyük harfe çevirir.
+3. `tersine_cevir(metin: str) -> str` — metni tersine çevirir.
+
+Test sorusu: "Şu metni tersine çevir ve kaç kelime olduğunu söyle: 'Agentic AI geleceği şekillendiriyor'"
+
+<details>
+<summary>Çözüm (tıkla)</summary>
+
+```python
+import os
+from dotenv import load_dotenv
+import anthropic
+
+load_dotenv()
+client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+
+# Araç tanımları
+ARACLAR = [
+    {
+        "name": "kelime_say",
+        "description": "Verilen metnin kelime sayısını döner.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"metin": {"type": "string"}},
+            "required": ["metin"]
+        }
+    },
+    {
+        "name": "buyuk_harf",
+        "description": "Metni tamamen büyük harfe çevirir.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"metin": {"type": "string"}},
+            "required": ["metin"]
+        }
+    },
+    {
+        "name": "tersine_cevir",
+        "description": "Metni kelime kelime tersine sıralar.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"metin": {"type": "string"}},
+            "required": ["metin"]
+        }
+    }
+]
+
+# Python uygulamaları
+def kelime_say(metin: str) -> str:
+    return str(len(metin.split()))
+
+def buyuk_harf(metin: str) -> str:
+    return metin.upper()
+
+def tersine_cevir(metin: str) -> str:
+    return " ".join(reversed(metin.split()))
+
+ARACI_CALISTIR = {
+    "kelime_say": kelime_say,
+    "buyuk_harf": buyuk_harf,
+    "tersine_cevir": tersine_cevir
+}
+
+def agent_dongusu(soru: str) -> str:
+    mesajlar = [{"role": "user", "content": soru}]
+    while True:
+        yanit = client.messages.create(
+            model="claude-sonnet-4-5",
+            max_tokens=512,
+            tools=ARACLAR,
+            messages=mesajlar
+        )
+        if yanit.stop_reason == "end_turn":
+            return yanit.content[0].text
+        if yanit.stop_reason == "tool_use":
+            mesajlar.append({"role": "assistant", "content": yanit.content})
+            sonuclar = []
+            for blok in yanit.content:
+                if blok.type == "tool_use":
+                    fn = ARACI_CALISTIR.get(blok.name)
+                    sonuc = fn(**blok.input) if fn else "Araç bulunamadı."
+                    sonuclar.append({
+                        "type": "tool_result",
+                        "tool_use_id": blok.id,
+                        "content": sonuc
+                    })
+            mesajlar.append({"role": "user", "content": sonuclar})
+
+print(agent_dongusu(
+    "Şu metni tersine çevir ve kaç kelime olduğunu söyle: "
+    "'Agentic AI geleceği şekillendiriyor'"
+))
+```
+
+</details>
+
+---
+
+## Sonraki: [Modül 03 — RAG Kurulumu](/modul/03-rag-kurulumu)
+
+Bir sonraki modülde arama destekli üretim (RAG — Retrieval-Augmented Generation) kurarak agent'ına uzun vadeli belge hafızası kazandıracaksın.

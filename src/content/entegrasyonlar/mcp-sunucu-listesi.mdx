@@ -1,0 +1,149 @@
+---
+title: "MCP Sunucu Listesi"
+slug: mcp-sunucu-listesi
+category: entegrasyonlar
+level: giris
+summary: "2026 itibarıyla öne çıkan MCP sunucularının küratörlü listesi. GitHub, Slack, Postgres, Stripe, Figma, Docker, Google Drive, Notion ve daha fazlası. Resmi ve topluluk sunucuları ayrıştırılmış."
+updated: 2026-05-23
+tags: ["mcp", "sunucu-listesi", "entegrasyon", "tool-use", "protokol"]
+related: ["mcp-protokol", "obsidian", "github"]
+---
+
+## MCP Nedir? (Hızlı Özet)
+
+**MCP (Model Context Protocol — Model Bağlam Protokolü)**, Anthropic'in 2024 sonunda açık kaynak olarak yayınladığı ve 2026 itibarıyla OpenAI, Google ve 200'den fazla topluluk sunucusuyla desteklenen **araç entegrasyon standardıdır**. MCP sayesinde bir agent, standart bir arayüzle farklı servis ve veritabanlarına bağlanır.
+
+MCP sunucuları iki kategoriye ayrılır:
+
+- **Resmi (Official):** Servisin kendisi veya Anthropic/partnerleri tarafından yayınlanır.
+- **Topluluk (Community):** Bağımsız geliştiriciler tarafından oluşturulur, kalite değişkendir.
+
+<Callout type="uyari">
+Topluluk sunucularını kullanmadan önce kaynak kodunu inceleyin. Güvenilir kaynak: [github.com/modelcontextprotocol/servers](https://github.com/modelcontextprotocol/servers) ve [mcp.so](https://mcp.so/).
+</Callout>
+
+---
+
+## Kurulum Genel Mantığı
+
+Tüm MCP sunucuları Claude Code veya uyumlu istemciye şu yapıyla eklenir:
+
+```json
+{
+  "mcpServers": {
+    "sunucu-adi": {
+      "command": "npx | uvx | python",
+      "args": ["paket-adi", ...],
+      "env": {
+        "API_KEY": "..."
+      }
+    }
+  }
+}
+```
+
+Yapılandırma dosyasının yeri:
+- Claude Desktop: `~/.config/Claude/claude_desktop_config.json` (macOS/Linux) veya `%APPDATA%\Claude\claude_desktop_config.json` (Windows).
+- Proje bazlı: `.mcp.json` (proje kökünde, Claude Code destekler).
+
+---
+
+## Sunucu Katalogu
+
+### Geliştirici Araçları
+
+| Sunucu | Tip | Ne Yapar | Kurulum | Bağlantı |
+|---|---|---|---|---|
+| **GitHub** | Resmi | Repository okuma/yazma, issue, PR, kod arama | `npx @modelcontextprotocol/server-github` | [Dokümantasyon](https://github.com/modelcontextprotocol/servers/tree/main/src/github) |
+| **GitLab** | Topluluk | GitLab proje ve MR yönetimi | `npx @modelcontextprotocol/server-gitlab` | [GitHub](https://github.com/modelcontextprotocol/servers/tree/main/src/gitlab) |
+| **Docker** | Topluluk | Container listesi, log okuma, komut çalıştırma | `npx @modelcontextprotocol/server-docker` | [Docker Hub](https://hub.docker.com/) |
+| **Filesystem** | Resmi | Yerel dosya sistemi okuma/yazma | `npx @modelcontextprotocol/server-filesystem` | [Dokümantasyon](https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem) |
+| **Fetch** | Resmi | Web URL'lerinden içerik çekme | `uvx mcp-server-fetch` | [PyPI](https://pypi.org/project/mcp-server-fetch/) |
+
+### Veritabanları
+
+| Sunucu | Tip | Ne Yapar | Kurulum | Bağlantı |
+|---|---|---|---|---|
+| **PostgreSQL** | Resmi | SQL sorgulama, şema okuma, yazma | `npx @modelcontextprotocol/server-postgres` | [Dokümantasyon](https://github.com/modelcontextprotocol/servers/tree/main/src/postgres) |
+| **SQLite** | Resmi | Yerel SQLite veritabanı işlemleri | `uvx mcp-server-sqlite` | [PyPI](https://pypi.org/project/mcp-server-sqlite/) |
+| **MySQL** | Topluluk | MySQL/MariaDB sorgulama | `npx mysql-mcp-server` | [npm](https://www.npmjs.com/package/mysql-mcp-server) |
+| **Redis** | Topluluk | Anahtar-değer okuma/yazma, pub/sub | `npx @modelcontextprotocol/server-redis` | [Dokümantasyon](https://github.com/modelcontextprotocol/servers/tree/main/src/redis) |
+
+### İletişim ve İş Birliği
+
+| Sunucu | Tip | Ne Yapar | Kurulum | Bağlantı |
+|---|---|---|---|---|
+| **Slack** | Resmi | Kanal mesajları, bildirim gönderme, kullanıcı bilgisi | `npx @modelcontextprotocol/server-slack` | [Dokümantasyon](https://github.com/modelcontextprotocol/servers/tree/main/src/slack) |
+| **Notion** | Resmi | Sayfa ve veritabanı okuma/yazma | `npx @notionhq/notion-mcp-server` | [Notion Developers](https://developers.notion.com/) |
+| **Google Drive** | Resmi | Drive dosya arama, Docs okuma/yazma | `npx @google/drive-mcp-server` | [Google Docs](https://developers.google.com/drive) |
+| **Gmail** | Topluluk | E-posta okuma, taslak oluşturma, gönderme | `npx gmail-mcp-server` | [npm](https://www.npmjs.com/) |
+| **Google Calendar** | Topluluk | Takvim etkinliği okuma ve oluşturma | `uvx mcp-google-calendar` | [PyPI](https://pypi.org/) |
+
+### Not Alma ve Bilgi Yönetimi
+
+| Sunucu | Tip | Ne Yapar | Kurulum | Bağlantı |
+|---|---|---|---|---|
+| **Obsidian** | Topluluk | Vault okuma/yazma, not arama | `uvx mcp-obsidian /path/to/vault` | [GitHub](https://github.com/MarkusPfundstein/mcp-obsidian) |
+| **Memory** | Resmi | Agent hafızası için kalıcı anahtar-değer deposu | `npx @modelcontextprotocol/server-memory` | [Dokümantasyon](https://github.com/modelcontextprotocol/servers/tree/main/src/memory) |
+
+### Finans ve E-Ticaret
+
+| Sunucu | Tip | Ne Yapar | Kurulum | Bağlantı |
+|---|---|---|---|---|
+| **Stripe** | Resmi | Ödeme, müşteri, ürün bilgisi okuma | `npx @stripe/agent-toolkit` | [Stripe Docs](https://docs.stripe.com/) |
+| **Shopify** | Topluluk | Sipariş, ürün, müşteri yönetimi | `npx shopify-mcp-server` | [npm](https://www.npmjs.com/) |
+
+### Tasarım ve UI
+
+| Sunucu | Tip | Ne Yapar | Kurulum | Bağlantı |
+|---|---|---|---|---|
+| **Figma** | Topluluk | Figma dosya ve bileşen okuma | `npx figma-mcp-server` | [npm](https://www.npmjs.com/) |
+
+### Arama ve Web
+
+| Sunucu | Tip | Ne Yapar | Kurulum | Bağlantı |
+|---|---|---|---|---|
+| **Brave Search** | Resmi | Web arama API'si | `npx @modelcontextprotocol/server-brave-search` | [Brave Search API](https://brave.com/search/api/) |
+| **Tavily** | Topluluk | AI odaklı web arama | `uvx mcp-server-tavily` | [Tavily](https://tavily.com/) |
+| **Puppeteer** | Resmi | Headless tarayıcı kontrolü, web scraping | `npx @modelcontextprotocol/server-puppeteer` | [Dokümantasyon](https://github.com/modelcontextprotocol/servers/tree/main/src/puppeteer) |
+
+### Bulut ve Altyapı
+
+| Sunucu | Tip | Ne Yapar | Kurulum | Bağlantı |
+|---|---|---|---|---|
+| **AWS KB Retrieval** | Topluluk | AWS Knowledge Base sorgulama | `npx aws-kb-retrieval-server` | [npm](https://www.npmjs.com/) |
+| **Cloudflare** | Topluluk | Workers, KV, R2 yönetimi | `npx @cloudflare/mcp-server-cloudflare` | [Cloudflare Docs](https://developers.cloudflare.com/) |
+
+---
+
+## Sunucu Seçerken Dikkat Edilecekler
+
+<Callout type="uyari">
+**Güvenlik:** MCP sunucuları sisteminize ve verilerinize geniş erişim sağlayabilir. Üretim ortamında yalnızca resmi veya iyi incelenmiş topluluk sunucularını kullanın.
+</Callout>
+
+| Kriter | Ne Kontrol Edin |
+|---|---|
+| **Kaynak doğruluğu** | GitHub repo'sunu ve yayıncısını doğrulayın |
+| **Son güncelleme** | 6 aydan eski güncellemesiz topluluk sunucularında dikkatli olun |
+| **İzin kapsamı** | Sunucunun istediği erişim haklarını inceleyin |
+| **Bağımlılıklar** | `npm audit` veya `pip-audit` çalıştırın |
+| **Topluluk** | GitHub star sayısı ve açık issue'lar sağlık göstergesidir |
+
+---
+
+## Kendi MCP Sunucunuzu Yazın
+
+Listede bulamadığınız bir servisi kendiniz MCP sunucusuna dönüştürebilirsiniz:
+
+[Modül 06 — MCP Sunucu Yazma →](/modul/06-mcp-sunucu-yazma)
+
+---
+
+## İlgili Sayfalar
+
+- [MCP Protokolü](/kavramlar/mcp-protokol)
+- [GitHub Entegrasyonu](/entegrasyonlar/github)
+- [Slack Entegrasyonu](/entegrasyonlar/slack)
+- [Notion Entegrasyonu](/entegrasyonlar/notion)
+- [Obsidian Entegrasyonu](/entegrasyonlar/obsidian)

@@ -1,0 +1,346 @@
+---
+title: "CrewAI ile Multi-Agent Ekibi"
+slug: 05-crewai-multi-agent
+category: modul
+level: orta
+summary: "CrewAI ile uzman agent'lardan oluşan bir ekip kurma, görev (task) tanımlama, process akışı yönetimi ve çok ajanlı içerik üretim hattı oluşturma."
+updated: 2026-05-23
+tags: [crewai, multi-agent, agent-ekibi, orchestration, orta]
+related: [04-langgraph-baslangic, 06-mcp-sunucu-yazma, 09-multi-model-orkestrasyon]
+modul: "05"
+sure: "90 dakika"
+onkosul: ["01-temeller", "02-ilk-tool-calling", "04-langgraph-baslangic"]
+ciktilar:
+  - "CrewAI ile agent ve görev tanımlayabilme"
+  - "Sequential ve hierarchical process seçimini anlayabilme"
+  - "Çok ajanlı içerik üretim hattı kurabilme"
+---
+
+## Hedef
+
+Bu modülün sonunda CrewAI ile birden fazla uzman agent'tan oluşan bir çok-ajanlı sistem (multi-agent system) kurabilecek, görev sıralamayı ve çıktı aktarımını yönetebileceksin. Pratik örnek: araştırmacı + yazar + editör ekibi.
+
+## Önkoşullar
+
+- [Modül 01](/modul/01-temeller), [Modül 02](/modul/02-ilk-tool-calling), [Modül 04](/modul/04-langgraph-baslangic) tamamlandı
+- Python sanal ortamı etkin
+
+## Öğrenme çıktıları
+
+1. `Agent`, `Task` ve `Crew` sınıflarını kullanarak tam bir ekip kurabilirsin.
+2. `Process.sequential` ve `Process.hierarchical` arasındaki farkı bilerek doğru seçimi yapabilirsin.
+3. Görev çıktılarını (task output) bir sonraki göreve bağlayabilirsin.
+4. CrewAI'nın LangGraph'a göre ne zaman daha uygun olduğunu açıklayabilirsin.
+
+---
+
+## Adım 1 — CrewAI nedir ve neden kullanılır?
+
+CrewAI, çok-ajanlı sistemler için tasarlanmış, hızlı prototiplemeye odaklanan bir çerçevedir (framework). LangGraph'a göre:
+
+| Boyut | CrewAI | LangGraph |
+|---|---|---|
+| Kurulum hızı | Çok hızlı | Orta |
+| Öğrenme eğrisi | Düşük | Orta-yüksek |
+| Durum yönetimi | Otomatik | Manuel, ince kontrol |
+| Üretim olgunluğu | İyi | Çok iyi |
+| Kullanım durumu | Hızlı prototip | Üretim, denetlenebilir |
+
+<Callout type="ipucu">
+"Multi-agent prototip 1 günde" → CrewAI. "Regülasyonlu sektör, denetlenebilir state" → LangGraph. İkisini birlikte de kullanabilirsin.
+</Callout>
+
+---
+
+## Adım 2 — Kurulum
+
+```bash
+pip install crewai crewai-tools python-dotenv
+```
+
+`.env` dosyana ekle:
+
+```
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+---
+
+## Adım 3 — Agent tanımlama
+
+Agent'lar belirli bir role, hedefe ve arka plan hikayesine sahip uzmanlar gibi tanımlanır:
+
+```python
+# agentler.py
+import os
+from dotenv import load_dotenv
+from crewai import Agent
+from langchain_anthropic import ChatAnthropic
+
+load_dotenv()
+
+llm = ChatAnthropic(
+    model="claude-sonnet-4-5",
+    anthropic_api_key=os.environ["ANTHROPIC_API_KEY"]
+)
+
+arastirmaci = Agent(
+    role="Kıdemli Araştırmacı",
+    goal=(
+        "Verilen konuda kapsamlı, doğrulanmış bilgi topla. "
+        "Kaynakları belirt ve önemli bulguları özetle."
+    ),
+    backstory=(
+        "Yılların deneyimiyle karmaşık konuları araştıran ve "
+        "güvenilir bilgiye ulaşmakta uzman bir analisttir."
+    ),
+    llm=llm,
+    verbose=True
+)
+
+yazar = Agent(
+    role="İçerik Yazarı",
+    goal=(
+        "Araştırmacının bulgularını okuyucu dostu, akıcı ve "
+        "kapsamlı bir makaleye dönüştür."
+    ),
+    backstory=(
+        "Teknik konuları geniş kitleye anlatma konusunda uzman, "
+        "SEO bilincine sahip bir içerik yazarıdır."
+    ),
+    llm=llm,
+    verbose=True
+)
+
+editor = Agent(
+    role="Baş Editör",
+    goal=(
+        "Yazıyı dilbilgisi, tutarlılık, ton ve doğruluk açısından "
+        "gözden geçir. Son versiyonu onayla veya düzeltme iste."
+    ),
+    backstory=(
+        "On yılı aşkın yayın deneyimiyle mükemmel içerik standartlarını "
+        "koruyan, eleştirel gözlü bir editördür."
+    ),
+    llm=llm,
+    verbose=True
+)
+```
+
+---
+
+## Adım 4 — Görev (Task) tanımlama
+
+```python
+# gorevler.py
+from crewai import Task
+from agentler import arastirmaci, yazar, editor
+
+arastirma_gorevi = Task(
+    description=(
+        "'{konu}' hakkında derinlemesine araştırma yap. "
+        "En az 5 önemli nokta bul. Kaynakları listele."
+    ),
+    expected_output=(
+        "Madde madde listelenmiş araştırma bulguları ve kaynak listesi. "
+        "Toplam 300-500 kelime."
+    ),
+    agent=arastirmaci
+)
+
+yazma_gorevi = Task(
+    description=(
+        "Araştırma bulgularına dayanarak '{konu}' hakkında "
+        "bir blog yazısı hazırla. Giriş, gelişme, sonuç bölümleri olsun."
+    ),
+    expected_output=(
+        "Başlık, giriş paragrafı, 3 ana bölüm ve sonuç paragrafı olan "
+        "600-800 kelimelik bir blog yazısı."
+    ),
+    agent=yazar,
+    context=[arastirma_gorevi]  # Araştırma görevinin çıktısını kullan
+)
+
+duzenleme_gorevi = Task(
+    description=(
+        "Blog yazısını editöryal perspektifle incele. "
+        "Dilbilgisi hataları, tutarsızlıklar ve ton sorunlarını düzelt."
+    ),
+    expected_output=(
+        "Düzeltilmiş, yayına hazır blog yazısı. "
+        "Yapılan değişikliklerin kısa özeti."
+    ),
+    agent=editor,
+    context=[yazma_gorevi]
+)
+```
+
+---
+
+## Adım 5 — Crew oluştur ve çalıştır
+
+```python
+# crew.py
+from crewai import Crew, Process
+from agentler import arastirmaci, yazar, editor
+from gorevler import arastirma_gorevi, yazma_gorevi, duzenleme_gorevi
+
+icerik_ekibi = Crew(
+    agents=[arastirmaci, yazar, editor],
+    tasks=[arastirma_gorevi, yazma_gorevi, duzenleme_gorevi],
+    process=Process.sequential,  # Sırayla: araştır → yaz → düzenle
+    verbose=True
+)
+
+if __name__ == "__main__":
+    sonuc = icerik_ekibi.kickoff(inputs={"konu": "LangGraph ile üretim agent'ları"})
+    print("\n=== NİHAİ ÇIKTI ===")
+    print(sonuc.raw)
+```
+
+<Callout type="uyari">
+`Process.sequential` ile görevler sırayla çalışır. `Process.hierarchical` modunda bir yönetici agent diğerlerini yönlendirir — bu daha pahalıdır, her yönetim kararı bir model çağrısı yapar.
+</Callout>
+
+---
+
+## Adım 6 — Araç (Tool) entegrasyonu
+
+CrewAI agent'larına özel araçlar ekleyebilirsin:
+
+```python
+from crewai_tools import FileReadTool, DirectoryReadTool
+from crewai import Agent
+
+dosya_okuma_araci = FileReadTool()
+dizin_arama_araci = DirectoryReadTool(directory="./belgeler")
+
+veri_analisti = Agent(
+    role="Veri Analisti",
+    goal="Belirtilen dizindeki dosyaları analiz et ve içgörü çıkar.",
+    backstory="Veri odaklı kararlar için dosya ve metin analizi uzmanıdır.",
+    tools=[dosya_okuma_araci, dizin_arama_araci],
+    llm=llm
+)
+```
+
+Özel araç da tanımlayabilirsin:
+
+```python
+from crewai.tools import BaseTool
+from pydantic import BaseModel, Field
+
+class HesapMakinesiGirisi(BaseModel):
+    ifade: str = Field(description="Hesaplanacak matematiksel ifade")
+
+class HesapMakinesiAraci(BaseTool):
+    name: str = "Hesap Makinesi"
+    description: str = "Güvenli matematiksel ifade hesaplar."
+    args_schema: type[BaseModel] = HesapMakinesiGirisi
+
+    def _run(self, ifade: str) -> str:
+        try:
+            # Güvenli değerlendirme için ast.literal_eval tercih et
+            sonuc = eval(ifade, {"__builtins__": {}})
+            return str(sonuc)
+        except Exception as e:
+            return f"Hata: {e}"
+```
+
+---
+
+## Adım 7 — Çıktı dosyasına kaydet
+
+```python
+# kaydet.py
+from crew import icerik_ekibi
+from pathlib import Path
+
+sonuc = icerik_ekibi.kickoff(inputs={"konu": "Agentic AI maliyet optimizasyonu"})
+
+# Çıktıyı dosyaya yaz
+Path("cikti/makale.md").write_text(sonuc.raw, encoding="utf-8")
+print("Makale kaydedildi: cikti/makale.md")
+
+# Token kullanımını görüntüle
+if sonuc.token_usage:
+    print(f"Toplam token: {sonuc.token_usage.total_tokens}")
+```
+
+---
+
+## Egzersiz
+
+Aşağıdaki üç agent'tan oluşan bir **müşteri destek ekibi** kur:
+
+1. **Triage Agent:** Gelen destek talebini kategorilere ayırır (teknik, faturalandırma, genel).
+2. **Uzman Agent:** Kategoriye göre teknik veya faturalandırma sorununu çözer.
+3. **Kalite Agent:** Verilen yanıtı müşteri memnuniyeti açısından değerlendirir.
+
+Test sorusu: "Hesabım neden iki kez ücretlendirildi?"
+
+<details>
+<summary>Çözüm (tıkla)</summary>
+
+```python
+import os
+from dotenv import load_dotenv
+from crewai import Agent, Task, Crew, Process
+from langchain_anthropic import ChatAnthropic
+
+load_dotenv()
+llm = ChatAnthropic(model="claude-sonnet-4-5", anthropic_api_key=os.environ["ANTHROPIC_API_KEY"])
+
+triage = Agent(
+    role="Destek Triage Uzmanı",
+    goal="Gelen talebi analiz et ve kategorisini belirle: teknik, faturalandırma veya genel.",
+    backstory="Müşteri taleplerini hızla doğru departmana yönlendiren deneyimli bir triage uzmanıdır.",
+    llm=llm
+)
+
+uzman = Agent(
+    role="Faturalandırma Uzmanı",
+    goal="Faturalandırma sorunlarını empatiyle ve net açıklamalarla çöz.",
+    backstory="Ödeme sistemleri ve müşteri ilişkileri konusunda uzman bir destek temsilcisidir.",
+    llm=llm
+)
+
+kalite = Agent(
+    role="Kalite Güvence Uzmanı",
+    goal="Verilen yanıtın doğruluğunu, tonunu ve müşteri memnuniyetini değerlendir.",
+    backstory="Müşteri deneyimini iyileştirmek için yanıt kalitesini denetleyen bir uzmandır.",
+    llm=llm
+)
+
+t1 = Task(
+    description="Şu müşteri talebini kategorize et: '{talep}'",
+    expected_output="Kategori adı ve kısa gerekçe.",
+    agent=triage
+)
+
+t2 = Task(
+    description="Müşteri talebine yanıt ver: '{talep}'. Triage raporunu göz önünde bulundur.",
+    expected_output="Müşteriye gönderilecek tam yanıt metni.",
+    agent=uzman,
+    context=[t1]
+)
+
+t3 = Task(
+    description="Verilen müşteri yanıtını değerlendir. Puanla (1-10) ve öneriler sun.",
+    expected_output="Puan + güçlü yönler + iyileştirme önerileri.",
+    agent=kalite,
+    context=[t2]
+)
+
+ekip = Crew(agents=[triage, uzman, kalite], tasks=[t1, t2, t3], process=Process.sequential)
+sonuc = ekip.kickoff(inputs={"talep": "Hesabım neden iki kez ücretlendirildi?"})
+print(sonuc.raw)
+```
+
+</details>
+
+---
+
+## Sonraki: [Modül 06 — MCP Sunucu Yazma](/modul/06-mcp-sunucu-yazma)
+
+Bir sonraki modülde Model Context Protocol (MCP) ile kendi araç sunucunu yazarak Claude Code ve diğer MCP-uyumlu agent'lara özel araçlar sunmayı öğreneceksin.

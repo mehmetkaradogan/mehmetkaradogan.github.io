@@ -1,0 +1,190 @@
+---
+// src/pages/roadmap.astro
+// Learning path with mermaid flowchart + clickable node links.
+
+import BaseLayout from '@layouts/BaseLayout.astro';
+import Breadcrumb from '@components/Breadcrumb.astro';
+
+// Kept as a JS string so Astro does not parse the `{...}` decision node as a JSX expression.
+const roadmapGraph = `flowchart TD
+  A["Python Temelleri (Modül 01)"] --> B["LLM Nedir & API Kullanımı (Modül 01)"]
+  B --> C["Prompting & Tool Calling (Modül 02)"]
+  C --> D["RAG Temelleri & Vektör Store (Modül 03)"]
+  D --> E["İlk Agent — ReAct (baslangic/ilk-agent)"]
+  E --> F{"Framework Seç"}
+  F --> G["CrewAI (Modül 05)"]
+  F --> H["LangGraph (Modül 04)"]
+  G --> I["Multi-Agent & Orchestration (Modül 05/09)"]
+  H --> I
+  I --> J["MCP Sunucu Yazma (Modül 06)"]
+  J --> K["Üretim: Observability & Eval (Modül 07-09)"]
+  K --> L["Bitirme Projesi (/projeler)"]
+
+  click A "/modul/01-temeller"
+  click B "/modul/01-temeller"
+  click C "/modul/02-ilk-tool-calling"
+  click D "/modul/03-rag-kurulumu"
+  click E "/baslangic/ilk-agent"
+  click F "/karsilastirmalar/hangi-arac-ne-zaman"
+  click G "/araclar/crewai"
+  click H "/araclar/langgraph"
+  click I "/modul/05-crewai-multi-agent"
+  click J "/modul/06-mcp-sunucu-yazma"
+  click K "/modul/09-multi-model-orkestrasyon"
+  click L "/projeler"`;
+---
+
+<BaseLayout
+  title="Öğrenme Yolu (Roadmap)"
+  description="Agentic AI öğrenme yolu: Python temellerinden üretim multi-agent sistemlerine adım adım görsel harita."
+>
+  <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <Breadcrumb crumbs={[{ label: 'Roadmap' }]} />
+
+    <header class="mb-8">
+      <h1 class="text-3xl font-bold mb-3" style="color: var(--text-primary);">Öğrenme Yolu</h1>
+      <p class="text-base" style="color: var(--text-secondary);">
+        Sıfırdan üretim sistemine — toplam ~10 hafta. Her adıma tıklayarak ilgili modüle veya sayfaya gidin.
+      </p>
+    </header>
+
+    <!-- Mermaid flowchart (rendered client-side) -->
+    <section
+      class="mb-12 p-6 rounded-2xl border overflow-x-auto"
+      style="background-color: var(--bg-surface); border-color: var(--border-color);"
+      aria-labelledby="roadmap-chart-heading"
+    >
+      <h2 id="roadmap-chart-heading" class="text-lg font-semibold mb-4" style="color: var(--text-primary);">
+        Öğrenme Akışı
+      </h2>
+
+      <pre class="mermaid flex justify-center">{roadmapGraph}</pre>
+    </section>
+
+    <script>
+      import mermaid from 'mermaid';
+      const isDark = document.documentElement.classList.contains('dark');
+      mermaid.initialize({
+        startOnLoad: false,
+        securityLevel: 'loose',
+        theme: isDark ? 'dark' : 'default',
+      });
+      mermaid.run({ querySelector: '.mermaid' });
+    </script>
+
+    <!-- Detailed step list -->
+    <section aria-labelledby="steps-heading">
+      <h2 id="steps-heading" class="text-xl font-bold mb-6" style="color: var(--text-primary);">Adım Adım Plan</h2>
+      <div class="space-y-4">
+        {[
+          {
+            step: '01',
+            duration: '1 hafta',
+            title: 'Python Temelleri & LLM API',
+            desc: 'Python sözdizimi, veri yapıları ve OpenAI/Anthropic API\'yi curl ve Python ile çağırma.',
+            href: '/modul/01-temeller',
+            tags: ['python', 'llm', 'api'],
+          },
+          {
+            step: '02',
+            duration: '1 hafta',
+            title: 'Prompting & Tool Calling',
+            desc: 'Etkili prompt mühendisliği, function calling ve ilk araç entegrasyonu.',
+            href: '/modul/02-ilk-tool-calling',
+            tags: ['prompting', 'tool-use', 'function-calling'],
+          },
+          {
+            step: '03',
+            duration: '1 hafta',
+            title: 'RAG Temelleri & Vektör Store',
+            desc: 'Embeddings, vektör veritabanları (Chroma/Pinecone) ve basit RAG pipeline.',
+            href: '/modul/03-rag-kurulumu',
+            tags: ['rag', 'embeddings', 'vector-store'],
+          },
+          {
+            step: '04',
+            duration: '1 hafta',
+            title: 'İlk Agent — ReAct Döngüsü',
+            desc: 'Tek araçlı ReAct agent: düşün → araç kullan → gözlemle → tekrarla.',
+            href: '/baslangic/ilk-agent',
+            tags: ['agent', 'react', 'tool-use'],
+          },
+          {
+            step: '05',
+            duration: '2 hafta',
+            title: 'Framework Seç & Uygula',
+            desc: 'LangGraph ile state machine agent VEYA CrewAI ile rol tabanlı multi-agent.',
+            href: '/karsilastirmalar/hangi-arac-ne-zaman',
+            tags: ['langgraph', 'crewai', 'framework'],
+          },
+          {
+            step: '06',
+            duration: '1 hafta',
+            title: 'Multi-Agent & Orchestration',
+            desc: 'Manager-worker pattern, paralel görevler, agent-arası iletişim.',
+            href: '/modul/05-crewai-multi-agent',
+            tags: ['multi-agent', 'orchestration'],
+          },
+          {
+            step: '07',
+            duration: '1 hafta',
+            title: 'MCP Sunucu Yazma',
+            desc: 'Kendi MCP araç sunucunuzu Python ile yazın ve Claude/Antigravity\'ye bağlayın.',
+            href: '/modul/06-mcp-sunucu-yazma',
+            tags: ['mcp', 'tool-server'],
+          },
+          {
+            step: '08',
+            duration: '1 hafta',
+            title: 'Üretim: Gözlemlenebilirlik & Eval',
+            desc: 'LangSmith tracing, eval metrikleri, maliyet optimizasyonu ve model routing.',
+            href: '/modul/09-multi-model-orkestrasyon',
+            tags: ['production', 'eval', 'cost'],
+          },
+          {
+            step: '09',
+            duration: 'Açık',
+            title: 'Bitirme Projesi',
+            desc: 'Öğrendiklerini gerçek bir projede uygula: fikir bankasından seç veya kendi projen.',
+            href: '/projeler',
+            tags: ['project', 'portfolio'],
+          },
+        ].map((step) => (
+          <a
+            href={step.href}
+            class="group flex items-start gap-5 p-5 rounded-xl border transition-all hover:shadow-md"
+            style="background-color: var(--bg-surface); border-color: var(--border-color);"
+          >
+            <div
+              class="shrink-0 w-12 h-12 rounded-xl flex items-center justify-center font-black text-sm"
+              style="background-color: var(--color-primary-100); color: var(--color-primary-700);"
+            >
+              {step.step}
+            </div>
+            <div class="flex-1">
+              <div class="flex items-start justify-between gap-3 mb-1">
+                <h3 class="font-semibold text-base group-hover:underline" style="color: var(--text-primary);">
+                  {step.title}
+                </h3>
+                <span
+                  class="shrink-0 text-xs px-2 py-0.5 rounded-full"
+                  style="background-color: var(--bg-subtle); color: var(--text-muted);"
+                >
+                  {step.duration}
+                </span>
+              </div>
+              <p class="text-sm mb-2" style="color: var(--text-secondary);">{step.desc}</p>
+              <div class="flex flex-wrap gap-1">
+                {step.tags.map((tag) => (
+                  <span class="text-xs px-1.5 py-0.5 rounded" style="background-color: var(--bg-subtle); color: var(--text-muted);">
+                    #{tag}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </a>
+        ))}
+      </div>
+    </section>
+  </div>
+</BaseLayout>

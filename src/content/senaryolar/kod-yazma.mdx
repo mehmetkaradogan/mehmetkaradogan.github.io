@@ -1,0 +1,240 @@
+---
+title: "Kod Yazma Ajanıyla Otomatik Geliştirme"
+slug: kod-yazma
+category: senaryolar
+level: giris
+summary: "Agentic kod yazma araçlarıyla (Claude Code, Antigravity, Codex) çok dosyalı değişiklik yapma, test oluşturma ve PR hazırlama süreçlerinin nasıl otomatize edileceği."
+updated: 2026-05-23
+tags: ["kod-yazma", "claude-code", "antigravity", "tool-use", "ci-cd"]
+related: ["dokumantasyon", "otomasyon", "arastirma"]
+---
+
+## Senaryo Tanımı
+
+Kod yazma (code generation) senaryosu, bir geliştirici veya ekibin tekrarlayan ya da karmaşık kodlama görevlerini bir ajana (agent) devrettiği durumu kapsar. Bu senaryonun güçlü yanı, ajanın tüm kod tabanını (codebase) bağlam olarak kullanabilmesi ve tutarlı değişiklikler yapabilmesidir.
+
+Tipik kullanım durumları:
+- Yeni özellik (feature) implementasyonu
+- Hata giderme (bug fixing) ve test yazma
+- Kod refaktörü (refactoring) ve teknik borç temizliği
+- API entegrasyon katmanı oluşturma
+- Dokümantasyon ve yorum (comment) ekleme
+- CI/CD pipeline güncelleme
+
+<Callout type="info">
+Bu senaryo giriş seviyesinde sınıflandırılmıştır. Temel Python veya JavaScript bilgisi ve bir API anahtarı yeterlidir. Araç kurulumları için ilgili araç sayfalarına bakın.
+</Callout>
+
+---
+
+## Hangi Araçlar Uygundur?
+
+| Araç | En iyi olduğu durum | Bağlantı |
+|---|---|---|
+| Claude Code | Terminal tabanlı çok dosyalı değişiklik, test + commit | [/araclar/claude-code](/araclar/claude-code) |
+| Google Antigravity 2.0 | IDE içinde plan modu + browser kontrolü + agent yöneticisi | [/araclar/google-antigravity](/araclar/google-antigravity) |
+| OpenAI Codex | Computer-use tabanlı GUI görevleri de içeren kodlama | [/araclar/openai-codex](/araclar/openai-codex) |
+| Cursor | Kod tabanı bağlamıyla hızlı yardımcı pilot mod | [/araclar/cursor](/araclar/cursor) |
+| Claude Agent SDK | Özel kodlama pipeline'ı için programatik ajan | [/araclar/claude-agent-sdk](/araclar/claude-agent-sdk) |
+
+**Model önerisi:** Karmaşık mimari kararlar için Opus 4 veya Gemini 3 Pro; rutin değişiklikler için Sonnet 4.5.
+
+---
+
+## Önerilen Workflow Deseni
+
+Kod yazma için **ReAct (Reason + Act)** deseni idealdir: ajan her adımda ne yapacağını açıklar, bir araç çağrısı (tool call) yapar, sonucu gözlemler ve tekrarlar.
+
+Detaylı desen açıklaması: [/workflow/desenler](/workflow/desenler)
+
+```
+[Görev açıklaması]
+       ↓
+[Ajan: planı açıkla (Reason)]
+       ↓
+[read_file → kodu anla]
+       ↓
+[write_file / edit_file → değişikliği uygula]
+       ↓
+[run_tests → sonucu gözlemle]
+       ↓  başarısızsa geri dön
+[run_linter → kalite kontrol]
+       ↓
+[git commit → değişikliği kaydet]
+```
+
+---
+
+## Adım Adım Örnek
+
+### Hedef
+Mevcut bir FastAPI uygulamasına yeni bir `/summarize` endpoint'i ekle, unit testi yaz, commit at.
+
+### Seçenek A — Claude Code (Terminal)
+
+```bash
+# 1. Kurulum
+npm install -g @anthropic-ai/claude-code
+
+# 2. Proje dizinine gir
+cd my-fastapi-project
+
+# 3. Claude Code'u başlat
+claude
+
+# 4. İçeride göreve yönlendir
+# > Mevcut router yapısını incele, /summarize endpoint'i ekle.
+#   Endpoint: POST /summarize, body: {"text": str}, response: {"summary": str}
+#   Anthropic API kullan. Unit test de yaz.
+```
+
+Claude Code otomatik olarak `router/` altındaki dosyaları okur, değişikliği uygular, `pytest` çalıştırır ve commit hazırlar.
+
+### Seçenek B — Programatik (Claude Agent SDK)
+
+```python
+import anthropic
+import subprocess
+from pathlib import Path
+
+client = anthropic.Anthropic()
+
+def read_file(path: str) -> str:
+    """Dosya içeriğini oku."""
+    return Path(path).read_text(encoding="utf-8")
+
+def write_file(path: str, content: str) -> str:
+    """Dosyaya yaz."""
+    Path(path).write_text(content, encoding="utf-8")
+    return f"{path} yazıldı."
+
+def run_tests() -> str:
+    """Pytest çalıştır."""
+    result = subprocess.run(
+        ["pytest", "-q"],
+        capture_output=True,
+        text=True
+    )
+    return result.stdout + result.stderr
+
+tools = [
+    {
+        "name": "read_file",
+        "description": "Belirtilen dosyayı oku",
+        "input_schema": {
+            "type": "object",
+            "properties": {"path": {"type": "string"}},
+            "required": ["path"]
+        }
+    },
+    {
+        "name": "write_file",
+        "description": "Dosyaya içerik yaz",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string"},
+                "content": {"type": "string"}
+            },
+            "required": ["path", "content"]
+        }
+    },
+    {
+        "name": "run_tests",
+        "description": "Pytest çalıştır ve sonucu döndür",
+        "input_schema": {"type": "object", "properties": {}}
+    }
+]
+
+tool_map = {"read_file": read_file, "write_file": write_file, "run_tests": run_tests}
+
+messages = [
+    {
+        "role": "user",
+        "content": (
+            "app/routers/summarize.py dosyasını oluştur. "
+            "POST /summarize endpoint'i yaz (body: text str, response: summary str). "
+            "tests/test_summarize.py ile unit testi de ekle. "
+            "Sonra testleri çalıştır."
+        )
+    }
+]
+
+# ReAct döngüsü
+while True:
+    response = client.messages.create(
+        model="claude-sonnet-4-5",
+        max_tokens=4096,
+        tools=tools,
+        messages=messages
+    )
+
+    messages.append({"role": "assistant", "content": response.content})
+
+    if response.stop_reason == "end_turn":
+        print("Tamamlandı:", response.content[0].text)
+        break
+
+    tool_results = []
+    for block in response.content:
+        if block.type == "tool_use":
+            fn = tool_map.get(block.name)
+            output = fn(**block.input) if fn else "Araç bulunamadı"
+            tool_results.append({
+                "type": "tool_result",
+                "tool_use_id": block.id,
+                "content": output
+            })
+
+    messages.append({"role": "user", "content": tool_results})
+```
+
+<Callout type="ipucu">
+`run_tests` sonucunu her zaman ajan döngüsüne geri besleyin. Ajan test hatalarını okuyup kodu düzeltebilir — bu "kendi kendini düzelten" (self-healing) döngüdür.
+</Callout>
+
+### Adım 3 — Antigravity ile Plan Mode
+
+Google Antigravity 2.0'da [Plan Mode](/araclar/google-antigravity) özelliği şu şekilde çalışır:
+
+1. Agent Manager'ı açın → "New Task" oluşturun.
+2. Görevi açıklayın: "FastAPI projesine /summarize endpoint ekle, test yaz."
+3. Antigravity mevcut dosyaları okur, bir **plan** sunar (hangi dosyaların değişeceğini listeler).
+4. Planı onaylayın → ajan değişiklikleri uygular.
+
+<details>
+<summary>Fark: Claude Code vs Antigravity vs Codex</summary>
+
+| Özellik | Claude Code | Antigravity 2.0 | Codex |
+|---|---|---|---|
+| Arayüz | Terminal | Desktop GUI + CLI | Web + API |
+| Plan onayı | Opsiyonel | Varsayılan (Plan Mode) | Değişken |
+| Browser control | Hayır | Evet | Evet |
+| MCP desteği | Native | Kısmi | Kısmi |
+| Ücretsiz | API maliyeti | Public preview | API maliyeti |
+
+</details>
+
+---
+
+## No-Code Alternatif
+
+Kod değişikliği gerektirmeyen küçük görevler için [n8n](/araclar/n8n) + GitHub API kombinasyonu kullanılabilir:
+
+- GitHub webhook → yeni issue gelince tetikle
+- AI Agent node → issue'dan kod taslağı oluştur
+- GitHub API node → pull request aç
+
+Bu yaklaşım kod yazmayı otomatize etmez ancak rutin PR şablonları, otomatik issue etiketleme ve basit değişiklikler için uygundur.
+
+---
+
+## İlgili Projeler
+
+- [/projeler/baslangic](/projeler/baslangic) — GitHub issue triage botu
+- [/projeler/ileri](/projeler/ileri) — Claude Code subagent ekibi + CI/CD entegrasyonu
+- [/projeler/orta](/projeler/orta) — Müşteri destek triajı + Slack handoff
+
+<Callout type="uyari">
+Ajan, üretim (production) dalına doğrudan commit atmaktan kaçınmalıdır. Her zaman bir geliştirme dalında (feature branch) çalıştırın ve insan onayı (HITL) sonrası merge edin.
+</Callout>

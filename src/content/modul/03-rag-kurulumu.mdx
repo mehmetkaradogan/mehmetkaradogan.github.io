@@ -1,0 +1,304 @@
+---
+title: "RAG Kurulumu: Belge Hafızalı Agent"
+slug: 03-rag-kurulumu
+category: modul
+level: giris
+summary: "Arama destekli üretim (RAG) ile PDF ve metin belgelerinden vektör veri tabanı oluşturma, anlamsal arama aracını agent döngüsüne entegre etme."
+updated: 2026-05-23
+tags: [rag, vector-store, embeddings, chroma, agentic-rag, giris]
+related: [02-ilk-tool-calling, 04-langgraph-baslangic, 01-temeller]
+modul: "03"
+sure: "90 dakika"
+onkosul: ["01-temeller", "02-ilk-tool-calling"]
+ciktilar:
+  - "Belgeleri parçalara (chunk) bölüp vektör veri tabanına kaydedebilme"
+  - "Anlamsal arama (semantic search) aracını agent döngüsüne bağlayabilme"
+  - "Agentic RAG ile basit RAG arasındaki farkı açıklayabilme"
+---
+
+## Hedef
+
+Bu modülün sonunda PDF ve metin belgelerinden bir vektör veri tabanı oluşturacak, bu veri tabanını sorgulayan bir araç yazacak ve agent döngüsüne entegre edeceksin. Böylece agent, kendi bağlam penceresine sığmayan büyük dokümanları anlayabilecek.
+
+## Önkoşullar
+
+- [Modül 01](/modul/01-temeller) ve [Modül 02](/modul/02-ilk-tool-calling) tamamlandı
+- Python sanal ortamı etkin
+
+## Öğrenme çıktıları
+
+1. Gömme (embedding) ve vektör benzerliğinin ne olduğunu açıklayabilirsin.
+2. `chromadb` ile yerel bir vektör veri tabanı kurabilirsin.
+3. Belgeleri chunk'lara bölüp indeksleyebilirsin.
+4. Agentic RAG ile klasik RAG arasındaki farkı bilen bir sistem tasarlayabilirsin.
+
+---
+
+## Adım 1 — RAG nedir?
+
+Arama destekli üretim (RAG — Retrieval-Augmented Generation), LLM'in cevap üretirken önce bir belge deposunu sorgulamasını sağlar:
+
+```
+Kullanıcı sorusu
+      │
+      ▼
+[Arama motoru] → En alakalı belge parçaları (chunk'lar)
+      │
+      ▼
+[LLM] → Soruyu + chunk'ları birlikte değerlendirip yanıt üretir
+```
+
+**Basit RAG** her soruda otomatik arama yapar.
+
+**Agentic RAG** ise agent'ın "Bu soruyu yanıtlamak için belge arayışına ihtiyacım var mı?" kararını kendisinin vermesini sağlar — gereksiz aramaları azaltır, maliyet düşer.
+
+---
+
+## Adım 2 — Bağımlılıkları yükle
+
+```bash
+pip install chromadb anthropic python-dotenv pypdf sentence-transformers
+```
+
+<Callout type="not">
+`sentence-transformers` yerel gömme üretmek için kullanılır (API maliyeti olmadan). Üretimde Anthropic veya OpenAI gömme API'si de kullanılabilir.
+</Callout>
+
+---
+
+## Adım 3 — Belge yükleme ve parçalama
+
+```python
+# belge_yukle.py
+from pathlib import Path
+import re
+
+def metni_parcala(metin: str, parca_boyutu: int = 500, cakisma: int = 50) -> list[str]:
+    """
+    Metni belirli boyutta örtüşen parçalara (chunk) böler.
+    cakisma: ardışık parçalar arasında tekrarlanan karakter sayısı.
+    """
+    parcalar = []
+    baslangic = 0
+    while baslangic < len(metin):
+        bitis = baslangic + parca_boyutu
+        parca = metin[baslangic:bitis]
+        # Cümle ortasında kesmemek için son nokta/satır sonunu bul
+        son_nokta = max(parca.rfind("."), parca.rfind("\n"))
+        if son_nokta > 0 and bitis < len(metin):
+            bitis = baslangic + son_nokta + 1
+            parca = metin[baslangic:bitis]
+        parcalar.append(parca.strip())
+        baslangic = bitis - cakisma
+    return [p for p in parcalar if len(p) > 20]
+
+def pdf_oku(dosya_yolu: str) -> str:
+    """PDF'den düz metin çıkarır."""
+    from pypdf import PdfReader
+    okuyucu = PdfReader(dosya_yolu)
+    metin = ""
+    for sayfa in okuyucu.pages:
+        metin += sayfa.extract_text() + "\n"
+    return metin
+
+def txt_oku(dosya_yolu: str) -> str:
+    return Path(dosya_yolu).read_text(encoding="utf-8")
+```
+
+---
+
+## Adım 4 — Vektör veri tabanı oluştur
+
+```python
+# veritabani.py
+import chromadb
+from chromadb.utils import embedding_functions
+
+# Yerel kalıcı veri tabanı
+chroma_istemci = chromadb.PersistentClient(path="./vektör_db")
+
+# Yerel gömme fonksiyonu (sentence-transformers)
+gomme_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
+    model_name="paraphrase-multilingual-MiniLM-L12-v2"  # Türkçe destekler
+)
+
+def koleksiyonu_al_veya_olustur(ad: str):
+    return chroma_istemci.get_or_create_collection(
+        name=ad,
+        embedding_function=gomme_fn
+    )
+
+def belge_ekle(koleksiyon_adi: str, parcalar: list[str], kaynak: str):
+    """Parçaları vektör veri tabanına ekler."""
+    koleksiyon = koleksiyonu_al_veya_olustur(koleksiyon_adi)
+    mevcut = koleksiyon.count()
+    ids = [f"{kaynak}_{mevcut + i}" for i in range(len(parcalar))]
+    metadatalar = [{"kaynak": kaynak, "parca_no": mevcut + i} for i in range(len(parcalar))]
+    koleksiyon.add(documents=parcalar, ids=ids, metadatas=metadatalar)
+    print(f"{len(parcalar)} parça '{koleksiyon_adi}' koleksiyonuna eklendi.")
+
+def belgede_ara(koleksiyon_adi: str, sorgu: str, sonuc_sayisi: int = 3) -> list[dict]:
+    """Anlamsal arama yapar ve en alakalı parçaları döner."""
+    koleksiyon = koleksiyonu_al_veya_olustur(koleksiyon_adi)
+    sonuclar = koleksiyon.query(
+        query_texts=[sorgu],
+        n_results=sonuc_sayisi
+    )
+    return [
+        {
+            "metin": doc,
+            "kaynak": meta.get("kaynak", "bilinmiyor"),
+            "parca_no": meta.get("parca_no", 0)
+        }
+        for doc, meta in zip(
+            sonuclar["documents"][0],
+            sonuclar["metadatas"][0]
+        )
+    ]
+```
+
+---
+
+## Adım 5 — Belgeleri indeksle
+
+```python
+# indeksle.py
+from belge_yukle import txt_oku, metni_parcala
+from veritabani import belge_ekle
+
+# Örnek metin dosyalarını indeksle
+dosyalar = [
+    ("belgeler/langgraph_nedir.txt", "langgraph"),
+    ("belgeler/crewai_giris.txt", "crewai"),
+]
+
+for dosya_yolu, etiket in dosyalar:
+    metin = txt_oku(dosya_yolu)
+    parcalar = metni_parcala(metin, parca_boyutu=400, cakisma=40)
+    belge_ekle("belgelerim", parcalar, etiket)
+```
+
+---
+
+## Adım 6 — RAG aracını agent'a bağla
+
+```python
+# rag_agent.py
+import os
+import json
+from dotenv import load_dotenv
+import anthropic
+from veritabani import belgede_ara
+
+load_dotenv()
+client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+
+ARACLAR = [
+    {
+        "name": "belge_ara",
+        "description": (
+            "Belge veri tabanında anlamsal arama yapar. "
+            "Kullanıcının sorusunu yanıtlamak için ek bilgiye ihtiyaç olduğunda çağır."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "sorgu": {
+                    "type": "string",
+                    "description": "Arama için en uygun anahtar ifade"
+                },
+                "sonuc_sayisi": {
+                    "type": "integer",
+                    "description": "Kaç sonuç döndürüleceği (varsayılan 3)",
+                    "default": 3
+                }
+            },
+            "required": ["sorgu"]
+        }
+    }
+]
+
+def araci_calistir(isim: str, parametreler: dict) -> str:
+    if isim == "belge_ara":
+        sonuclar = belgede_ara(
+            "belgelerim",
+            parametreler["sorgu"],
+            parametreler.get("sonuc_sayisi", 3)
+        )
+        if not sonuclar:
+            return "Alakalı belge bulunamadı."
+        cikti = []
+        for i, s in enumerate(sonuclar, 1):
+            cikti.append(f"[{i}] Kaynak: {s['kaynak']}\n{s['metin']}")
+        return "\n\n".join(cikti)
+    return "Bilinmeyen araç."
+
+def rag_agent(soru: str) -> str:
+    mesajlar = [{"role": "user", "content": soru}]
+    while True:
+        yanit = client.messages.create(
+            model="claude-sonnet-4-5",
+            max_tokens=1024,
+            system=(
+                "Sen belge veri tabanına erişimi olan bir asistansın. "
+                "Soruyu yanıtlamadan önce gerekirse belge_ara aracını kullan."
+            ),
+            tools=ARACLAR,
+            messages=mesajlar
+        )
+        if yanit.stop_reason == "end_turn":
+            for blok in yanit.content:
+                if hasattr(blok, "text"):
+                    return blok.text
+        if yanit.stop_reason == "tool_use":
+            mesajlar.append({"role": "assistant", "content": yanit.content})
+            sonuclar = []
+            for blok in yanit.content:
+                if blok.type == "tool_use":
+                    s = araci_calistir(blok.name, blok.input)
+                    sonuclar.append({
+                        "type": "tool_result",
+                        "tool_use_id": blok.id,
+                        "content": s
+                    })
+            mesajlar.append({"role": "user", "content": sonuclar})
+
+# Test
+if __name__ == "__main__":
+    print(rag_agent("LangGraph ile CrewAI arasındaki temel fark ne?"))
+```
+
+<Callout type="info">
+Bu, agentic RAG örneğidir: model, soruya kendi bağlam penceresindeki bilgiyle yeterince yanıt verebildiğinde arama yapmaz. Arama kararını LLM verir — bu, klasik RAG'dan temel farkıdır.
+</Callout>
+
+---
+
+## Egzersiz
+
+1. `belgeler/` klasörüne en az 3 farklı `.txt` dosyası ekle (herhangi bir konu).
+2. Bu dosyaları indeksle.
+3. Agent'a 5 farklı soru sor, hangi sorgularda arama yaptığını, hangilerinde yapmadığını kaydet.
+4. Sonuçları yorumla: Model hangi durumlarda aramayı atladı?
+
+<details>
+<summary>Çözüm ipuçları (tıkla)</summary>
+
+Model genellikle şu durumlarda aramayı atlar:
+- Soru genel bilgi gerektiriyorsa ("Python nedir?")
+- Soru sohbet geçmişinde zaten yanıtlandıysa
+- Soru açıkça veri tabanı dışı bir alanla ilgiliyse
+
+Arama yapılmasını zorlamak için sistem mesajına şunu ekle:
+```
+Kullanıcının sorusunu yanıtlamadan önce MUTLAKA belge_ara aracını çağır.
+```
+Bu, agentic davranışı klasik RAG'a döndürür — ikisi arasındaki farkı daha iyi anlarsın.
+
+</details>
+
+---
+
+## Sonraki: [Modül 04 — LangGraph Başlangıç](/modul/04-langgraph-baslangic)
+
+Bir sonraki modülde LangGraph ile durumlu (stateful) graph'lar kurarak agent'ının adımlar arasında durum taşımasını ve koşullu kenarlar (conditional edges) ile karar vermesini öğreneceksin.

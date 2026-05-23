@@ -1,0 +1,24 @@
+---
+title: "MCP fiili standart oldu: OpenAI ve Google resmi desteği onayladı"
+slug: mcp-fiili-standart-oldu
+category: haberler
+level: giris
+summary: "Model Context Protocol (MCP), OpenAI ve Google'ın resmi desteğini açıklamasıyla ajan ekosisteminin fiili iletişim standardı konumuna yükseldi. 200'den fazla topluluk sunucusu mevcut."
+updated: 2026-05-23
+date: 2026-05-12
+source: "the-verge"
+newsType: update
+tags: ["mcp", "standart", "anthropic", "openai", "google", "ekosistem"]
+related: ["mcp-protokol"]
+tools: ["claude-code", "openai-agents-sdk", "google-antigravity"]
+---
+
+**Ne değişti:** Anthropic'in 2024 sonunda açık kaynak olarak yayınladığı **Model Context Protocol (MCP)**, Mayıs 2026 itibarıyla ajan ekosisteminin fiili (de-facto) standardı konumuna geldi. OpenAI, Agents SDK'nın 1.5 güncellemesiyle MCP sunucu desteğini yerel olarak entegre ettiğini duyurdu. Google, Antigravity 2.0 CLI'sının MCP sunucularıyla çalışabileceğini resmi olarak belgeledi. Topluluk tarafından geliştirilen MCP sunucu sayısı 200'ü geçti; GitHub, Slack, PostgreSQL, Stripe, Figma, Docker, Linear ve daha birçok platform için hazır sunucular mevcut.
+
+**Etkisi:** MCP'nin çok taraflı kabul görmesi, geliştiricilerin ajan bağlantı katmanını bir kez yazıp farklı LLM sağlayıcılarında çalıştırabilmesi anlamına geliyor. Bu, vendor lock-in (sağlayıcıya bağımlılık) riskini önemli ölçüde azaltıyor. Özellikle kurumsal müşteriler için taşınabilirlik büyük avantaj sağlıyor. Function calling ile MCP arasında seçim yapma konusunda rehber için [/sss](/sss) sayfasındaki ilgili soruyu inceleyin.
+
+**Detay:** MCP'nin teknik mimarisi, nasıl çalıştığı ve kendi MCP sunucunuzu nasıl yazacağınız için [/kavramlar/mcp-protokol](/kavramlar/mcp-protokol) ve [/modul/06-mcp-sunucu-yazma](/modul/06-mcp-sunucu-yazma) sayfalarına bakın. Mevcut sunucu kataloğu için [/entegrasyonlar/mcp-sunucu-listesi](/entegrasyonlar/mcp-sunucu-listesi) sayfasını ziyaret edin.
+
+<Callout type="info">
+MCP ile function calling arasındaki fark: MCP, sunucu-istemci mimarisiyle araçları ağ üzerinden keşfedilebilir yapar. Function calling ise LLM'e doğrudan JSON şeması iletir. Küçük projeler için function calling, büyük ekosistemler ve paylaşılabilir araç katalogları için MCP tercih edin.
+</Callout>

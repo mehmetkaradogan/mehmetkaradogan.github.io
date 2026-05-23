@@ -1,0 +1,97 @@
+---
+// src/pages/haberler/index.astro
+// Changelog list sorted by date desc with newsType badges.
+
+import BaseLayout from '@layouts/BaseLayout.astro';
+import Badge from '@components/Badge.astro';
+import Breadcrumb from '@components/Breadcrumb.astro';
+import { getCollection } from 'astro:content';
+
+const entries = await getCollection('haberler', (e) => !e.data.draft);
+const sorted = entries.sort((a, b) => b.data.date.getTime() - a.data.date.getTime());
+
+const newsTypeVariants: Record<string, string> = {
+  launch:      'newsType-launch',
+  update:      'newsType-update',
+  deprecation: 'newsType-deprecation',
+  research:    'newsType-research',
+};
+---
+
+<BaseLayout
+  title="Haberler"
+  description="Agentic AI dünyasından en son gelişmeler: yeni araçlar, güncellemeler, araştırmalar ve kullanım dışı kalmalar."
+>
+  <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <Breadcrumb crumbs={[{ label: 'Haberler' }]} />
+
+    <header class="mb-8">
+      <h1 class="text-3xl font-bold" style="color: var(--text-primary);">Haberler</h1>
+      <p class="mt-2 text-base" style="color: var(--text-secondary);">
+        Agentic AI dünyasından güncel gelişmeler — yeni çıkışlar, güncellemeler ve araştırmalar.
+      </p>
+    </header>
+
+    {sorted.length > 0 ? (
+      <div class="space-y-4">
+        {sorted.map((entry) => (
+          <article
+            class="flex gap-4 p-5 rounded-xl border transition-all hover:shadow-sm"
+            style="background-color: var(--bg-surface); border-color: var(--border-color);"
+          >
+            <!-- Date column -->
+            <div class="shrink-0 text-center w-14">
+              <time
+                datetime={entry.data.date.toISOString()}
+                class="flex flex-col"
+              >
+                <span class="text-lg font-bold leading-none" style="color: var(--text-primary);">
+                  {entry.data.date.getDate()}
+                </span>
+                <span class="text-xs" style="color: var(--text-muted);">
+                  {entry.data.date.toLocaleDateString('tr-TR', { month: 'short' })}
+                </span>
+                <span class="text-xs" style="color: var(--text-muted);">
+                  {entry.data.date.getFullYear()}
+                </span>
+              </time>
+            </div>
+
+            <!-- Content -->
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 mb-2 flex-wrap">
+                <Badge
+                  label={entry.data.newsType}
+                  variant={newsTypeVariants[entry.data.newsType] ?? 'default'}
+                />
+
+                {entry.data.tools.slice(0, 3).map((tool: string) => (
+                  <span
+                    class="text-xs px-2 py-0.5 rounded-md"
+                    style="background-color: var(--bg-subtle); color: var(--text-muted);"
+                  >
+                    {tool}
+                  </span>
+                ))}
+              </div>
+              <h2 class="font-semibold text-base" style="color: var(--text-primary);">
+                <a href={`/haberler/${entry.slug}`} class="hover:underline">
+                  {entry.data.title}
+                </a>
+              </h2>
+              <p class="mt-1 text-sm" style="color: var(--text-secondary);">{entry.data.summary}</p>
+              {entry.data.source && (
+                <p class="mt-1 text-xs" style="color: var(--text-muted);">Kaynak: {entry.data.source}</p>
+              )}
+            </div>
+          </article>
+        ))}
+      </div>
+    ) : (
+      <div class="rounded-xl border p-12 text-center" style="border-color: var(--border-color); background-color: var(--bg-surface);">
+        <p class="text-lg font-semibold" style="color: var(--text-primary);">Yakında</p>
+        <p class="mt-2 text-sm" style="color: var(--text-secondary);">Haberler hazırlanıyor.</p>
+      </div>
+    )}
+  </div>
+</BaseLayout>

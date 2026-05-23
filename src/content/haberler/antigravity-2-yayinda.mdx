@@ -1,0 +1,24 @@
+---
+title: "Google Antigravity 2.0 yayında"
+slug: antigravity-2-yayinda
+category: haberler
+level: giris
+summary: "Google Antigravity, bağımsız bir masaüstü ajan yöneticisi, CLI ve SDK ile Antigravity 2.0'a yükseltildi. Gemini CLI tamamen emekli edildi."
+updated: 2026-05-23
+date: 2026-05-19
+source: "9to5google"
+newsType: launch
+tags: ["antigravity", "google", "gemini", "ide", "agent-manager"]
+related: ["google-antigravity"]
+tools: ["google-antigravity"]
+---
+
+**Ne değişti:** Google, Antigravity IDE'nin 2.0 sürümünü 19 Mayıs 2026 tarihinde duyurdu. Yeni sürümün en büyük değişikliği, bağımsız bir **Agent Manager** masaüstü uygulamasının eklenmesidir. Bu uygulama, VS Code fork tabanlı editörden ayrı çalışır; birden fazla ajanlık görevi aynı anda izlemeye ve yönetmeye olanak tanır. Buna ek olarak yeni bir **CLI** (komut satırı arayüzü) ve **SDK** paketi yayınlandı. Google AI Studio ile iki yönlü entegrasyon sağlandı: Studio'da geliştirilen ajan şablonları Antigravity'e aktarılabiliyor.
+
+**Etkisi:** Gemini CLI, Antigravity 2.0 ile resmi olarak sonlandırıldı (deprecated). Gemini CLI kullanan geliştiricilerin geçiş yapması gerekiyor; Google, otomatik migrasyon rehberi yayınladı. Bireysel kullanım için ücretsiz public preview devam ediyor. Antigravity 2.0, **Plan Mode** ve **Fast Mode** seçeneklerini koruyor; yeni gelen **Co-Pilot modu** ise kritik adımlarda insan onayını (HITL) zorunlu kılıyor. Model desteği: Gemini 3 Pro öncelikli, Claude Sonnet 4.5 ve GPT-OSS alternatifleri mevcut.
+
+**Detay:** Antigravity 2.0'ın tam özellik listesi, kurulum ve geçiş rehberi için [/araclar/google-antigravity](/araclar/google-antigravity) sayfasına bakın. Claude Code ve OpenAI Codex ile karşılaştırma için [/karsilastirmalar/claude-code-vs-codex-vs-antigravity](/karsilastirmalar/claude-code-vs-codex-vs-antigravity) sayfasını inceleyin.
+
+<Callout type="uyari">
+Mevcut Gemini CLI kurulumunuz varsa Antigravity 2.0 CLI'ye geçiş için `antigravity migrate` komutunu çalıştırın. Yapılandırma dosyaları otomatik taşınır ancak özel eklentiler manuel güncelleme gerektirebilir.
+</Callout>

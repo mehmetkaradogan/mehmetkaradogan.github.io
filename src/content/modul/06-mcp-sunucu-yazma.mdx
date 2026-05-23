@@ -1,0 +1,392 @@
+---
+title: "MCP Sunucu Yazma: Kendi Araç Sunucunu Kur"
+slug: 06-mcp-sunucu-yazma
+category: modul
+level: orta
+summary: "Model Context Protocol (MCP) ile Python'da özel araç sunucusu yazma, Claude Code ve diğer MCP istemcilerine araç sunma ve yerel MCP sunucusunu test etme."
+updated: 2026-05-23
+tags: [mcp, mcp-protokol, araç-sunucu, claude-code, python, orta]
+related: [05-crewai-multi-agent, 07-claude-code-uretim, 04-langgraph-baslangic]
+modul: "06"
+sure: "90 dakika"
+onkosul: ["01-temeller", "02-ilk-tool-calling"]
+ciktilar:
+  - "MCP protokolünün temel akışını açıklayabilme"
+  - "Python ile en az 3 araç sunan bir MCP sunucusu yazabilme"
+  - "Sunucuyu Claude Code ile bağlayıp test edebilme"
+---
+
+## Hedef
+
+Bu modülün sonunda Model Context Protocol (MCP) mimarisini anlayacak ve kendi araçlarını sunan bir MCP sunucusu yazacaksın. Bu sunucu Claude Code, LangGraph agent'ı veya herhangi bir MCP-uyumlu istemci tarafından kullanılabilecek.
+
+## Önkoşullar
+
+- [Modül 01](/modul/01-temeller) ve [Modül 02](/modul/02-ilk-tool-calling) tamamlandı
+- Python 3.11+, `pip` kullanılabilir
+
+## Öğrenme çıktıları
+
+1. MCP'nin ne olduğunu ve neden fiili standart haline geldiğini açıklayabilirsin.
+2. `mcp` Python SDK ile araç (tool) ve kaynak (resource) tanımlayabilirsin.
+3. Sunucuyu `stdio` modunda çalıştırıp Claude Code'a bağlayabilirsin.
+4. Hata yönetimi ve loglama ekleyebilirsin.
+
+---
+
+## Adım 1 — MCP nedir?
+
+Model Context Protocol (MCP), Anthropic'in 2024 sonunda açık kaynak olarak yayımladığı ve 2026 itibarıyla OpenAI, Google ve 200+ topluluk sunucusu tarafından desteklenen bir araç entegrasyon protokolüdür.
+
+MCP öncesinde her agent çerçevesi kendi araç formatını kullanıyordu. MCP ile:
+
+```
+[MCP İstemcisi]  ←──stdio/HTTP──→  [MCP Sunucusu]
+ Claude Code                         senin araçların
+ LangGraph agent
+ CrewAI agent
+```
+
+Bir kez MCP sunucusu yaz → tüm MCP-uyumlu istemciler kullansın.
+
+MCP'nin üç temel kavramı:
+- **Tool (Araç):** İstemcinin çağırabileceği fonksiyon.
+- **Resource (Kaynak):** Okunabilir dosya, URL, veritabanı.
+- **Prompt (İstem):** Yeniden kullanılabilir mesaj şablonu.
+
+---
+
+## Adım 2 — Kurulum
+
+```bash
+pip install mcp python-dotenv
+```
+
+---
+
+## Adım 3 — İlk MCP sunucusu
+
+```python
+# sunucu.py
+import asyncio
+import json
+from datetime import datetime
+from pathlib import Path
+import mcp.server.stdio
+import mcp.types as types
+from mcp.server import NotificationOptions, Server
+from mcp.server.models import InitializationOptions
+
+# Sunucu örneği oluştur
+sunucu = Server("benim-arac-sunucum")
+
+# ── ARAÇ LİSTESİ ──────────────────────────────────────────────
+@sunucu.list_tools()
+async def arac_listesi() -> list[types.Tool]:
+    return [
+        types.Tool(
+            name="bugun_tarihi",
+            description="Bugünün tarih ve saatini döner.",
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        ),
+        types.Tool(
+            name="dosya_oku",
+            description="Belirtilen dosyanın içeriğini okur.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "dosya_yolu": {
+                        "type": "string",
+                        "description": "Okunacak dosyanın tam yolu"
+                    }
+                },
+                "required": ["dosya_yolu"]
+            }
+        ),
+        types.Tool(
+            name="hesap_yap",
+            description="Basit matematiksel hesaplama yapar.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "sayi1": {"type": "number"},
+                    "sayi2": {"type": "number"},
+                    "islem": {
+                        "type": "string",
+                        "enum": ["topla", "cikar", "carp", "bol"]
+                    }
+                },
+                "required": ["sayi1", "sayi2", "islem"]
+            }
+        )
+    ]
+
+# ── ARAÇ ÇAĞRISI ──────────────────────────────────────────────
+@sunucu.call_tool()
+async def araci_cagir(
+    name: str,
+    arguments: dict
+) -> list[types.TextContent]:
+
+    if name == "bugun_tarihi":
+        simdi = datetime.now().strftime("%d %B %Y, %H:%M:%S")
+        return [types.TextContent(type="text", text=simdi)]
+
+    elif name == "dosya_oku":
+        yol = Path(arguments["dosya_yolu"])
+        if not yol.exists():
+            return [types.TextContent(type="text", text=f"Hata: '{yol}' bulunamadı.")]
+        return [types.TextContent(type="text", text=yol.read_text(encoding="utf-8"))]
+
+    elif name == "hesap_yap":
+        s1, s2 = arguments["sayi1"], arguments["sayi2"]
+        islem = arguments["islem"]
+        if islem == "topla":
+            sonuc = s1 + s2
+        elif islem == "cikar":
+            sonuc = s1 - s2
+        elif islem == "carp":
+            sonuc = s1 * s2
+        elif islem == "bol":
+            if s2 == 0:
+                return [types.TextContent(type="text", text="Hata: Sıfıra bölünemez.")]
+            sonuc = s1 / s2
+        return [types.TextContent(type="text", text=str(sonuc))]
+
+    else:
+        return [types.TextContent(type="text", text=f"Hata: '{name}' aracı bilinmiyor.")]
+
+# ── SUNUCUYU BAŞLAT ──────────────────────────────────────────
+async def main():
+    async with mcp.server.stdio.stdio_server() as (okuma_akisi, yazma_akisi):
+        await sunucu.run(
+            okuma_akisi,
+            yazma_akisi,
+            InitializationOptions(
+                server_name="benim-arac-sunucum",
+                server_version="0.1.0",
+                capabilities=sunucu.get_capabilities(
+                    notification_options=NotificationOptions(),
+                    experimental_capabilities={}
+                )
+            )
+        )
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+---
+
+## Adım 4 — Kaynak (Resource) tanımla
+
+Araçların yanı sıra MCP sunucusu statik veya dinamik kaynaklar da sunabilir:
+
+```python
+@sunucu.list_resources()
+async def kaynak_listesi() -> list[types.Resource]:
+    return [
+        types.Resource(
+            uri="file:///belgeler/kilavuz.txt",
+            name="Kullanım Kılavuzu",
+            description="Araç sunucusu kullanım kılavuzu",
+            mimeType="text/plain"
+        )
+    ]
+
+@sunucu.read_resource()
+async def kaynak_oku(uri: str) -> str:
+    if uri == "file:///belgeler/kilavuz.txt":
+        yol = Path("belgeler/kilavuz.txt")
+        if yol.exists():
+            return yol.read_text(encoding="utf-8")
+    raise ValueError(f"Kaynak bulunamadı: {uri}")
+```
+
+---
+
+## Adım 5 — Claude Code'a bağla
+
+Claude Code yapılandırma dosyasına sunucuyu ekle. Yapılandırma dosyası konumu:
+
+- **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+- **macOS/Linux:** `~/.config/claude/claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "benim-arac-sunucum": {
+      "command": "python",
+      "args": ["C:/Users/kullanici/projeler/mcp-sunucu/sunucu.py"],
+      "env": {}
+    }
+  }
+}
+```
+
+Claude Code'u yeniden başlat. Araçlar otomatik olarak algılanacak.
+
+<Callout type="ipucu">
+Geliştirme sırasında sunucuyu elle test etmek için `mcp dev sunucu.py` komutunu kullan — tarayıcı tabanlı MCP Inspector açılır.
+</Callout>
+
+---
+
+## Adım 6 — Sunucuyu test et
+
+```bash
+# MCP Inspector ile görsel test (mcp paketi ile birlikte gelir)
+mcp dev sunucu.py
+```
+
+Veya Python istemcisiyle programatik test:
+
+```python
+# test_istemci.py
+import asyncio
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
+
+async def test_et():
+    sunucu_parametreleri = StdioServerParameters(
+        command="python",
+        args=["sunucu.py"]
+    )
+    async with stdio_client(sunucu_parametreleri) as (okuma, yazma):
+        async with ClientSession(okuma, yazma) as oturum:
+            await oturum.initialize()
+
+            # Araç listesini al
+            araclar = await oturum.list_tools()
+            print("Mevcut araçlar:")
+            for arac in araclar.tools:
+                print(f"  - {arac.name}: {arac.description}")
+
+            # Araç çağır
+            sonuc = await oturum.call_tool("bugun_tarihi", {})
+            print(f"\nBugünün tarihi: {sonuc.content[0].text}")
+
+            sonuc2 = await oturum.call_tool("hesap_yap", {
+                "sayi1": 42, "sayi2": 8, "islem": "carp"
+            })
+            print(f"42 × 8 = {sonuc2.content[0].text}")
+
+asyncio.run(test_et())
+```
+
+---
+
+## Adım 7 — Hata yönetimi ve loglama
+
+```python
+import logging
+import sys
+
+# Stderr'e log yaz (stdout MCP protokolü için ayrılmış)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    stream=sys.stderr
+)
+logger = logging.getLogger("benim-sunucu")
+
+@sunucu.call_tool()
+async def araci_cagir(name: str, arguments: dict) -> list[types.TextContent]:
+    logger.info(f"Araç çağrıldı: {name} | Parametreler: {arguments}")
+    try:
+        # ... araç mantığı ...
+        pass
+    except Exception as e:
+        logger.error(f"Araç hatası: {name} | {e}")
+        return [types.TextContent(type="text", text=f"Dahili hata: {e}")]
+```
+
+<Callout type="uyari">
+MCP sunucusunda `print()` kullanma — stdout MCP protokolü iletişimine ayrılmıştır. Tüm loglama ve debug çıktılarını `stderr`'e yönlendir.
+</Callout>
+
+---
+
+## Egzersiz
+
+Aşağıdaki özelliklere sahip bir MCP sunucusu yaz:
+
+1. `not_ekle(baslik: str, icerik: str) -> str` — `notlar/` klasörüne `.txt` dosyası olarak kaydeder.
+2. `notlari_listele() -> str` — `notlar/` klasöründeki tüm dosya adlarını listeler.
+3. `not_oku(dosya_adi: str) -> str` — belirtilen notu okur.
+
+Sunucuyu test istemcisiyle çalıştır ve 3 not ekle, listele, birini oku.
+
+<details>
+<summary>Çözüm (tıkla)</summary>
+
+```python
+# not_sunucu.py
+import asyncio
+from pathlib import Path
+import mcp.server.stdio
+import mcp.types as types
+from mcp.server import NotificationOptions, Server
+from mcp.server.models import InitializationOptions
+
+NOTLAR_KLASORU = Path("notlar")
+NOTLAR_KLASORU.mkdir(exist_ok=True)
+
+sunucu = Server("not-sunucusu")
+
+@sunucu.list_tools()
+async def arac_listesi():
+    return [
+        types.Tool(name="not_ekle", description="Yeni not ekler.",
+            inputSchema={"type":"object","properties":{
+                "baslik":{"type":"string"},"icerik":{"type":"string"}
+            },"required":["baslik","icerik"]}),
+        types.Tool(name="notlari_listele", description="Notları listeler.",
+            inputSchema={"type":"object","properties":{},"required":[]}),
+        types.Tool(name="not_oku", description="Belirtilen notu okur.",
+            inputSchema={"type":"object","properties":{
+                "dosya_adi":{"type":"string"}
+            },"required":["dosya_adi"]})
+    ]
+
+@sunucu.call_tool()
+async def araci_cagir(name: str, arguments: dict):
+    if name == "not_ekle":
+        guvenli_ad = arguments["baslik"].replace(" ", "_").replace("/", "") + ".txt"
+        (NOTLAR_KLASORU / guvenli_ad).write_text(arguments["icerik"], encoding="utf-8")
+        return [types.TextContent(type="text", text=f"Not kaydedildi: {guvenli_ad}")]
+    elif name == "notlari_listele":
+        notlar = [f.name for f in NOTLAR_KLASORU.glob("*.txt")]
+        return [types.TextContent(type="text", text="\n".join(notlar) or "Henüz not yok.")]
+    elif name == "not_oku":
+        yol = NOTLAR_KLASORU / arguments["dosya_adi"]
+        if not yol.exists():
+            return [types.TextContent(type="text", text="Not bulunamadı.")]
+        return [types.TextContent(type="text", text=yol.read_text(encoding="utf-8"))]
+    return [types.TextContent(type="text", text="Bilinmeyen araç.")]
+
+async def main():
+    async with mcp.server.stdio.stdio_server() as (r, w):
+        await sunucu.run(r, w, InitializationOptions(
+            server_name="not-sunucusu", server_version="0.1.0",
+            capabilities=sunucu.get_capabilities(
+                notification_options=NotificationOptions(),
+                experimental_capabilities={}
+            )
+        ))
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+</details>
+
+---
+
+## Sonraki: [Modül 07 — Claude Code Üretim Kullanımı](/modul/07-claude-code-uretim)
+
+Bir sonraki modülde Claude Code'u üretim ortamında kullanmayı, subagent yapılandırmasını ve GitHub Actions ile CI/CD entegrasyonunu öğreneceksin.

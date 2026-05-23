@@ -1,0 +1,194 @@
+---
+title: "Cursor"
+slug: cursor
+category: araclar
+level: giris
+summary: "VS Code tabanlı AI destekli kod düzenleyici; Composer, Tab tamamlama ve çok dosyalı sohbet (chat) özellikleriyle geliştirici verimliliğini artırır."
+updated: 2026-05-23
+tags: ["agentic-ide", "kodlama", "vscode", "ai-editor"]
+related: ["claude-code", "google-antigravity", "openai-codex"]
+vendor: "Anysphere"
+toolType: "agentic-ide"
+license: "Proprietary (ücretsiz katman var)"
+os: ["macOS", "Linux", "Windows"]
+primary_model: "Claude Sonnet 4.5 / GPT-4o / Gemini 3 Pro"
+last_review: 2026-05-23
+status: "active"
+---
+
+## Nedir?
+
+Cursor, Anysphere tarafından geliştirilen VS Code çatalı (fork) tabanlı bir yapay zeka destekli kod düzenleyicidir (AI-powered code editor). Tam bir IDE deneyimi sunarken Claude Sonnet 4.5, GPT-4o ve Gemini 3 Pro gibi güçlü modelleri doğrudan düzenleyici içinde kullanmayı sağlar. "Composer" özelliği çok dosyalı değişiklikler yapabilir; "Tab" özelliği bağlam farkında (context-aware) kod tamamlama sunar; sohbet (chat) özelliği ise kod tabanı genelinde soru sorma imkanı verir. Agentic IDE'lerin aksine Cursor daha fazla insan denetimi (human-in-the-loop) ile çalışır — her değişiklik önerilir ve kullanıcı onaylar.
+
+## Ne için iyi
+
+- Mevcut VS Code iş akışını bozmadan AI yardımı alma.
+- Bağlam farkında (context-aware) kod tamamlama ve öneri — Tab ile hızlı kabul.
+- Composer ile çok dosyalı planlı değişiklikler; her adımı görebilir, onaylayabilirsiniz.
+- Kod tabanı genelinde anlayış gerektiren karmaşık sorular sorma.
+- Model esnekliği — aynı arayüzde Claude, GPT veya Gemini arasında geçiş.
+- VS Code uzantılarının tamamına erişim (mevcut ekosistemi koru).
+- Başlangıç ve orta seviye kullanıcılar için düşük öğrenme eğrisi.
+
+## Ne için kötü
+
+- Tamamen otonom, insansız (unattended) uzun süreli ajan görevleri — Claude Code daha uygundur.
+- Terminal tabanlı CI/CD pipeline entegrasyonu.
+- Computer use (bilgisayar kontrolü) görevleri — Antigravity veya Codex daha uygundur.
+- MCP ekosistemiyle derin entegrasyon gerektiren senaryolar.
+- Çevrimiçi bağlantı kesildiğinde AI özellikleri devre dışı kalır.
+
+## Kurulum
+
+```bash
+# macOS — Homebrew ile
+brew install --cask cursor
+
+# Windows — winget ile
+winget install Anysphere.Cursor
+
+# Linux — AppImage ile (resmi siteden indirin)
+# https://cursor.sh adresinden platform bazlı yükleyici indirin
+chmod +x cursor-*.AppImage
+./cursor-*.AppImage
+```
+
+<Callout type="ipucu">
+Mevcut VS Code ayarlarınızı, uzantılarınızı ve tema tercihlerinizi tek tıkla Cursor'a aktarabilirsiniz: Cursor açıkken `Cmd/Ctrl + Shift + P` → "Cursor: Import VS Code Settings".
+</Callout>
+
+## İlk çalıştırma
+
+```bash
+# Bir proje dizinini Cursor ile aç
+cursor ~/projelerim/benim-proje
+
+# veya mevcut VS Code'dan geçiş
+# Dosya menüsü → "Cursor ile aç" (uzantı kuruluysa)
+```
+
+Cursor açıldıktan sonra:
+1. Sağ üstte model seçiciden tercihli modeli seçin (Claude Sonnet 4.5 önerilir).
+2. `Cmd/Ctrl + K` ile satır içi sohbet açın.
+3. `Cmd/Ctrl + L` ile yan panel sohbet (chat) açın.
+4. `Cmd/Ctrl + I` ile Composer'ı açın (çok dosyalı değişiklikler için).
+
+## Senaryolar
+
+### 1) Composer ile Çok Dosyalı Yeniden Yapılandırma
+
+```
+# Composer'da (Cmd+I) prompt:
+"Bu projedeki tüm useState kullanımlarını useReducer ile refactor et.
+Her bileşen için ayrı bir reducer dosyası oluştur.
+TypeScript tip tanımlarını ekle."
+```
+
+Composer değiştirilecek dosyaların listesini önce gösterir. Her değişikliği ayrı ayrı onaylayabilir veya tümünü kabul edebilirsiniz.
+
+### 2) Bağlam Farkında Soru Sorma
+
+```
+# Chat panelinde (Cmd+L) — kod tabanı genelinde anlama:
+"Bu projede kimlik doğrulama (authentication) nasıl çalışıyor?
+JWT token'ların ömrü ne, nerede yenileniyor?"
+```
+
+Cursor, kod tabanını indeksler ve alakalı dosya referanslarıyla birlikte yanıt verir.
+
+### 3) Tab ile Akıllı Kod Tamamlama
+
+```python
+# Sadece yorumu yaz, Tab'a basarak kod tamamlanır:
+
+# Kullanıcı girişini doğrula: email formatı kontrol et,
+# şifre en az 8 karakter, büyük harf, rakam içermeli
+def validate_user_input(email: str, password: str) -> dict:
+    # Tab tuşuna bas — Cursor kodu tamamlar:
+    errors = {}
+    if not re.match(r'^[^@]+@[^@]+\.[^@]+$', email):
+        errors['email'] = 'Geçersiz email formatı'
+    if len(password) < 8:
+        errors['password'] = 'Şifre en az 8 karakter olmalı'
+    # ... devam eder
+    return errors
+```
+
+## Diğer araçlarla
+
+**GitHub Copilot ile:** Cursor, GitHub Copilot'un alternatifi olarak konumlanır. Copilot'tan Cursor'a geçiş için VS Code ayarlarınız zaten taşınır.
+
+**Git ve GitHub ile:** Cursor'un dahili diff görünümü, AI ile commit mesajı önerisi ve PR açıklama taslağı özellikleri doğrudan kaynak kontrol panelinde çalışır.
+
+**Docker ile:** Terminal entegrasyonu sayesinde `docker-compose up`, `kubectl apply` gibi komutları Cursor terminalinden çalıştırırken AI yardımı alabilirsiniz.
+
+**Claude Code ile birlikte:** Cursor düzenleyicide çalışırken, arka planda Claude Code uzun soluklu otonom görevleri yürütebilir. İkisi birbirini tamamlar.
+
+**MCP ile:** Cursor'da sınırlı MCP desteği geliştirilmektedir; tam MCP entegrasyonu için Claude Code tercih edilmeli. Bkz. [MCP protokolü](/kavramlar/mcp-protokol).
+
+## Yaygın hatalar ve çözümleri
+
+<details>
+<summary>Model seçici görünmüyor / API hatası</summary>
+
+Cursor ayarları (`Cmd/Ctrl + ,`) → "AI" bölümüne gidin. API anahtarınızı girin veya "Cursor Plan" aboneliğinizin aktif olduğunu doğrulayın. Ücretsiz katmanda günlük sınır mevcuttur.
+
+</details>
+
+<details>
+<summary>Composer değişiklikleri yanlış dosyalara uyguluyor</summary>
+
+Composer'a başlamadan önce ilgili dosyaları `@dosya-adi` referansıyla bağlama ekleyin:
+
+```
+@src/components/LoginForm.tsx @src/hooks/useAuth.ts
+"Bu bileşenlerdeki form validasyonunu zod ile güncelle."
+```
+
+</details>
+
+<details>
+<summary>Büyük projede kod tabanı indeksleme yavaş</summary>
+
+`.cursorignore` dosyası oluşturarak gereksiz dizinleri hariç tutun:
+
+```
+node_modules/
+dist/
+.git/
+*.log
+coverage/
+```
+
+</details>
+
+<details>
+<summary>VS Code uzantısı Cursor'da çalışmıyor</summary>
+
+Cursor, VS Code uzantı marketplace'ini destekler. Uzantı Cursor ile uyumsuzsa VS Code Marketplace sayfasında "Cursor" etiketini kontrol edin. Alternatif olarak `.vsix` dosyasını manuel yükleyin.
+
+</details>
+
+## Maliyet / limit
+
+- **Ücretsiz katman:** Günlük sınırlı sayıda "premium model" isteği; Claude Haiku gibi daha hızlı modeller sınırsız.
+- **Pro Plan:** Aylık sabit ücretle sınırsız premium model erişimi (Claude Sonnet 4.5, GPT-4o dahil).
+- **Business Plan:** Takım yönetimi, merkezi faturalama, gizlilik güvenceleri.
+- **Kendi API anahtarı (BYOK):** Anthropic veya OpenAI API anahtarınızı doğrudan bağlayabilirsiniz — Cursor planı gerekmez, token başı ödeme yaparsınız.
+
+<Callout type="info">
+Composer ile yapılan çok dosyalı değişiklikler birden fazla model çağrısı üretebilir. Büyük yeniden yapılandırma görevlerinde token tüketimini takip edin.
+</Callout>
+
+## Karşılaştırma
+
+[Claude Code vs Codex vs Antigravity](/karsilastirmalar/claude-code-vs-codex-vs-antigravity)
+
+[Hangi araç ne zaman?](/karsilastirmalar/hangi-arac-ne-zaman)
+
+## Daha fazla
+
+- [Cursor resmi dokümantasyonu](https://docs.cursor.sh) — Cursor
+- [Cursor forum](https://forum.cursor.sh) — Topluluk
+- [Cursor YouTube kanalı](https://youtube.com/@cursor-ide) — Resmi
+- [VS Code'dan Cursor'a geçiş rehberi](https://docs.cursor.sh/migration) — Cursor Docs

@@ -1,0 +1,233 @@
+---
+title: "İçerik Üretimi ile Çok Adımlı Yayın Pipeline'ı"
+slug: icerik-uretimi
+category: senaryolar
+level: orta
+summary: "Araştırma, taslak, düzenleme ve yayınlama adımlarını kapsayan çok ajanlı içerik üretim hattının nasıl kurulacağı; blog, sosyal medya ve bülten için pratik örnekler."
+updated: 2026-05-23
+tags: ["icerik-uretimi", "multi-agent", "crewai", "n8n", "workflow"]
+related: ["arastirma", "otomasyon", "dokumantasyon"]
+---
+
+## Senaryo Tanımı
+
+İçerik üretimi (content generation) senaryosu, bir konunun araştırılmasından nihai yayına kadar geçen süreci birden fazla özelleşmiş ajanın (agent) koordineli şekilde yönetmesini kapsar. Tek bir "her şeyi yapan" ajan yerine **araştırmacı + yazar + editör + SEO uzmanı** rollerine ayrılmış ajanlar daha tutarlı ve yüksek kaliteli çıktı üretir.
+
+Tipik kullanım durumları:
+- Blog yazısı ve makale üretimi
+- Sosyal medya içerik takvimi oluşturma
+- Haftalık bülten (newsletter) hazırlama
+- Ürün açıklaması ve pazarlama metni
+- Video script yazımı
+- Çok dilli içerik adaptasyonu
+
+<Callout type="info">
+Bu senaryo, multi-agent (çok ajanlı) koordinasyon gerektirdiği için orta seviye olarak sınıflandırılmıştır. CrewAI veya LangGraph'a giriş için önce [/modul/05-crewai-multi-agent](/modul/05-crewai-multi-agent) modülünü tamamlayın.
+</Callout>
+
+---
+
+## Hangi Araçlar Uygundur?
+
+| Araç | Rol | Bağlantı |
+|---|---|---|
+| CrewAI | Rol tabanlı çok ajanlı içerik pipeline'ı | [/araclar/crewai](/araclar/crewai) |
+| LangGraph | Durable, checkpoint'li içerik iş akışı | [/araclar/langgraph](/araclar/langgraph) |
+| n8n | No-code içerik pipeline'ı + platform entegrasyonu | [/araclar/n8n](/araclar/n8n) |
+| Make | Cloud tabanlı içerik otomasyon senaryoları | [/araclar/make](/araclar/make) |
+| Claude Agent SDK | Özel içerik ajanı için düşük seviyeli kontrol | [/araclar/claude-agent-sdk](/araclar/claude-agent-sdk) |
+
+**Model önerisi:** Yaratıcı yazım için Claude Sonnet 4.5 veya GPT-4o; SEO analizi ve kısa görevler için Haiku/Flash ile maliyet optimize edin.
+
+---
+
+## Önerilen Workflow Deseni
+
+İçerik üretimi için **Manager-Worker** deseni en uygundur: bir orkestratör (orchestrator) ajan görevleri dağıtır, her uzman ajan kendi rolünü üstlenir.
+
+Detaylı desen açıklaması: [/workflow/desenler](/workflow/desenler)
+
+```
+[Konu + Hedef kitle]
+         ↓
+[Araştırmacı ajan]
+  → web araması, kaynak toplama
+         ↓
+[Yazar ajan]
+  → taslak oluşturma, SEO başlığı
+         ↓
+[Editör ajan]
+  → ton, tutarlılık, akış denetimi
+         ↓
+[SEO uzmanı ajan]
+  → meta description, anahtar kelimeler
+         ↓
+[Yayın ajanı]
+  → WordPress / Notion / Ghost'a gönder
+```
+
+---
+
+## Adım Adım Örnek
+
+### Hedef
+"LangGraph nedir?" sorusunu yanıtlayan Türkçe bir blog yazısı üret, SEO'ya hazır hale getir.
+
+### Adım 1 — Kurulum
+
+```bash
+pip install crewai crewai-tools duckduckgo-search
+```
+
+### Adım 2 — CrewAI ile Çok Ajanlı Pipeline
+
+```python
+from crewai import Agent, Task, Crew, Process
+from crewai_tools import DuckDuckGoSearchRun
+
+search_tool = DuckDuckGoSearchRun()
+
+# --- Ajanları tanımla ---
+researcher = Agent(
+    role="İçerik Araştırmacısı",
+    goal="Verilen konu hakkında güncel ve doğru bilgi topla",
+    backstory=(
+        "Teknik içerik için kaynak toplama konusunda uzmanlaşmış "
+        "bir araştırmacısın. Güvenilir kaynakları tercih edersin."
+    ),
+    tools=[search_tool],
+    llm="claude-sonnet-4-5",
+    verbose=True
+)
+
+writer = Agent(
+    role="Teknik İçerik Yazarı",
+    goal="Araştırma çıktısını akıcı, anlaşılır Türkçe blog yazısına dönüştür",
+    backstory=(
+        "Türk yazılım geliştiricilerine yönelik teknik içerik üreten "
+        "deneyimli bir yazarsın. Jargonu minimize eder, örnekleri ön plana çıkarırsın."
+    ),
+    llm="claude-sonnet-4-5",
+    verbose=True
+)
+
+editor = Agent(
+    role="İçerik Editörü",
+    goal="Yazıyı ton, akış ve doğruluk açısından denetle; SEO başlıkları ekle",
+    backstory=(
+        "Hem teknik doğruluğu hem de okuyucu deneyimini dengeleyen "
+        "bir editörsün."
+    ),
+    llm="claude-haiku-3-5",  # Daha ucuz model yeterli
+    verbose=True
+)
+
+# --- Görevleri tanımla ---
+research_task = Task(
+    description=(
+        "LangGraph hakkında araştırma yap. "
+        "2025-2026 itibariyle üretim kullanımları, avantajları ve sınırlamaları neler? "
+        "En az 3 güvenilir kaynak belirt."
+    ),
+    expected_output="Kaynakları listelenmiş araştırma özeti (500 kelime)",
+    agent=researcher
+)
+
+writing_task = Task(
+    description=(
+        "Araştırma özetini kullanarak Türkçe bir blog yazısı yaz. "
+        "Başlık, giriş, 3 ana bölüm, sonuç içersin. Hedef kitle: Türk yazılım geliştiricileri."
+    ),
+    expected_output="Markdown formatında Türkçe blog yazısı (800-1000 kelime)",
+    agent=writer,
+    context=[research_task]
+)
+
+editing_task = Task(
+    description=(
+        "Blog yazısını düzenle: "
+        "1) SEO uyumlu bir H1 başlık, "
+        "2) meta description (155 karakter), "
+        "3) 5 anahtar kelime öner. "
+        "Ton ve akışı kontrol et."
+    ),
+    expected_output="Düzenlenmiş blog yazısı + SEO meta verileri",
+    agent=editor,
+    context=[writing_task]
+)
+
+# --- Crew oluştur ve çalıştır ---
+crew = Crew(
+    agents=[researcher, writer, editor],
+    tasks=[research_task, writing_task, editing_task],
+    process=Process.sequential,
+    verbose=True
+)
+
+result = crew.kickoff()
+print(result.raw)
+```
+
+<Callout type="ipucu">
+CrewAI'de `Process.sequential` yerine `Process.hierarchical` kullanarak bir yönetici (manager) ajan ekleyebilirsiniz. Yönetici ajan, çıktı kalitesini denetler ve gerekirse görevi yeniden atar.
+</Callout>
+
+### Adım 3 — Çıktıyı Otomatik Yayınlama
+
+```python
+import requests
+
+def publish_to_ghost(title: str, content: str, api_key: str, api_url: str):
+    """Ghost CMS'e blog yazısı gönder."""
+    import jwt, time
+    
+    # JWT token oluştur
+    key_id, key_secret = api_key.split(":")
+    iat = int(time.time())
+    payload = {"iat": iat, "exp": iat + 5 * 60, "aud": "/admin/"}
+    token = jwt.encode(payload, bytes.fromhex(key_secret), algorithm="HS256", headers={"kid": key_id})
+    
+    headers = {"Authorization": f"Ghost {token}"}
+    data = {
+        "posts": [{
+            "title": title,
+            "html": content,
+            "status": "draft"  # Önce taslak olarak kaydet
+        }]
+    }
+    
+    response = requests.post(f"{api_url}/ghost/api/admin/posts/", json=data, headers=headers)
+    return response.json()
+```
+
+---
+
+## No-Code Alternatif (n8n)
+
+[n8n](/araclar/n8n) ile sıfır kod yazarak içerik pipeline'ı kurmak mümkündür:
+
+<details>
+<summary>n8n içerik pipeline'ı adımları</summary>
+
+1. **Tetikleyici:** Airtable veya Google Sheets'te yeni satır → tetikle.
+2. **HTTP Request:** Serper.dev ile konu araştırması yap.
+3. **AI Agent (LLM):** Araştırma çıktısından taslak oluştur.
+4. **AI Agent (LLM):** Taslağı SEO optimizasyonuyla düzenle.
+5. **WordPress / Ghost node:** Taslak olarak kaydet.
+6. **Slack / Email:** Editöre bildirim gönder (HITL - insan onayı).
+
+Make.com ile de benzer iş akışı kurulabilir; [/araclar/make](/araclar/make) sayfasına bakın.
+
+</details>
+
+---
+
+## İlgili Projeler
+
+- [/projeler/orta](/projeler/orta) — Multi-agent içerik üretim hattı (araştırmacı + yazar + editör)
+- [/projeler/baslangic](/projeler/baslangic) — RSS okuyup haftalık bülten üreten agent
+- [/projeler/ileri](/projeler/ileri) — Multi-model router + maliyet optimizasyonu
+
+<Callout type="uyari">
+Yapay zeka ile üretilen içerikleri yayınlamadan önce mutlaka bir insan tarafından gözden geçirin. Özellikle teknik doğruluk, güncellik ve kaynak doğrulaması kritiktir.
+</Callout>

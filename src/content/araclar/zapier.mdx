@@ -1,0 +1,171 @@
+---
+title: "Zapier"
+slug: zapier
+category: araclar
+level: giris
+summary: "En yaygın kullanılan no-code otomasyon platformu; 7000+ uygulama, AI adımları ve sıfır kod gereksinimiyle iş otomasyonuna en hızlı başlangıç yolu."
+updated: 2026-05-23
+tags: ["no-code-automation", "bulut", "iş-akışı", "entegrasyon"]
+related: ["make", "n8n", "claude-agent-sdk"]
+vendor: "Zapier, Inc."
+toolType: "no-code-automation"
+license: "Proprietary (ücretsiz katman var)"
+os: ["Web (tarayıcı tabanlı)"]
+primary_model: "Model bağımsız (OpenAI, Anthropic, Gemini entegrasyonları mevcut)"
+last_review: 2026-05-23
+status: "active"
+---
+
+## Nedir?
+
+Zapier, en geniş uygulama entegrasyon kütüphanesine (7000+) sahip bulut tabanlı no-code otomasyon platformudur. "Zap" adı verilen otomasyon iş akışlarında bir tetikleyici (trigger) ve bir veya birden fazla eylem (action) birbirine bağlanır. 2026 itibarıyla "AI Actions" ve "AI by Zapier" özellikleriyle LLM entegrasyonu sunmaktadır. Teknik bilgi gerektirmeyen kullanıcı arayüzü ve devasa uygulama kütüphanesiyle iş otomasyonuna en hızlı giriş noktasıdır. Kod yazmadan ChatGPT, Claude veya Gemini'yi iş akışlarınıza entegre edebilirsiniz.
+
+## Ne için iyi
+
+- **En kolay başlangıç:** Teknik bilgi gerektirmeyen, rehber destekli kurulum deneyimi.
+- **En geniş entegrasyon:** 7000+ uygulama — neredeyse her SaaS araç Zapier'de mevcuttur.
+- **AI Actions:** Doğal dil komutuyla AI'nın uygun Zapier eylemini seçmesi — "bunu ChatGPT'ye sor" adımını elle kurmanıza gerek yok.
+- **ChatBot özelliği:** Zapier'in dahili chatbot oluşturucusu ile kendi verilerinize bağlı sohbet botu kurma.
+- **Güvenilirlik:** Kurumsal düzeyde çalışma süresi (uptime) ve destek.
+- **Ekip işbirliği:** Ortak Zap düzenleme ve yönetimi.
+
+## Ne için kötü
+
+- **Karmaşık veri dönüşümü:** Make'in formülleri veya n8n'in JavaScript düğümü kadar güçlü değil.
+- **Self-host gereksinimi:** Tamamen bulut — veri gizliliği kritikse n8n tercih edin.
+- **Maliyet:** Yüksek hacimli otomasyon için Make veya n8n'den pahalıya gelebilir.
+- **Döngüler ve koşullar:** Gelişmiş kontrol akışı için Make daha esnek.
+- **Gelişmiş AI orkestrasyonu:** LangGraph veya CrewAI gibi ajan çerçevelerine kıyasla sınırlı.
+
+## Kurulum
+
+Zapier tamamen web tabanlıdır — kurulum gerekmez.
+
+<Callout type="ipucu">
+zapier.com adresine giderek Google veya Microsoft hesabınızla ücretsiz giriş yapın. İlk Zap'ı 5 dakikada kurabilirsiniz — "Use a template" ile hazır şablonlardan başlayın.
+</Callout>
+
+## İlk çalıştırma
+
+1. [zapier.com](https://zapier.com) adresine gidin, ücretsiz hesap oluşturun.
+2. "+ Create Zap" butonuna tıklayın.
+3. Tetikleyici seçin: Örn. "Gmail — New Email Matching Search".
+4. Gmail hesabınıza izin verin.
+5. Eylem ekleyin: "OpenAI (ChatGPT) — Send Prompt".
+6. OpenAI API anahtarınızı girin.
+7. Gmail'den gelen e-posta metnini OpenAI'ın prompt alanına eşleyin.
+8. Sonucu istediğiniz yere gönderin: Slack, Notion, Google Sheets vb.
+9. "Test" edin ve "Publish" ile yayınlayın.
+
+## Senaryolar
+
+### 1) AI Destekli İçerik Dönüşümü
+
+```
+Tetikleyici: RSS Feed (yeni makale — örn. TechCrunch)
+    ↓
+Filtre: Başlık "AI" veya "agent" içeriyor mu?
+    ↓
+Eylem: OpenAI — "Bu makaleyi 3 maddelik Türkçe özete dönüştür"
+    ↓
+Eylem: Notion — "AI Haberleri" veritabanına ekle
+    ↓
+Eylem: Slack — #ai-haberleri kanalına paylaş
+```
+
+Kod yok, Zap editöründe tamamen görsel.
+
+### 2) Müşteri Sorusu → AI Yanıtı → CRM Güncellemesi
+
+```
+Tetikleyici: Typeform (yeni müşteri sorusu)
+    ↓
+Eylem: Claude AI (Anthropic) — Soruyu analiz et ve yanıt taslağı oluştur
+    ↓
+Eylem: Gmail — Müşteriye AI yanıtını gönder (insan onayı opsiyonel)
+    ↓
+Eylem: HubSpot — İletişimi CRM'e kaydet
+    ↓
+Eylem: Google Sheets — Soru/yanıt logunu tabloya ekle
+```
+
+### 3) Sosyal Medya İçerik Takvimi Otomasyonu
+
+```
+Tetikleyici: Google Sheets (yeni satır — içerik taslağı)
+    ↓
+Eylem: ChatGPT (GPT-4o) — Twitter/X için kısalt, LinkedIn için genişlet, 
+                            Instagram için hashtag ekle
+    ↓
+Eylem: Buffer veya Hootsuite — Her platform için zamanlanmış gönderi oluştur
+    ↓
+Eylem: Slack — İçerik ekibine önizleme gönder
+```
+
+## Diğer araçlarla
+
+**Make ile karşılaştırma:** Zapier kolaydır ancak Make daha güçlü veri dönüşümü sunar. Basit iki adımlı entegrasyonlarda Zapier, karmaşık veri manipülasyonunda Make tercih edilir. Bkz. [n8n vs Make vs Zapier](/karsilastirmalar/n8n-vs-make-vs-zapier).
+
+**n8n ile karşılaştırma:** Veri gizliliği ve self-host için n8n; hız ve kolaylık için Zapier. n8n daha ucuz, Zapier daha kolaydır.
+
+**Claude/OpenAI ile:** Zapier'in "AI by Zapier" adımı veya doğrudan Anthropic/OpenAI uygulamaları Claude ve GPT-4o'yu Zap'lara entegre etmenizi sağlar — API kodu yazmadan.
+
+**Webhooks ile:** Zapier'in Webhook tetikleyicisi, özel uygulamalardan veya Python/Node.js scriptlerden Zap'ları tetiklemenizi sağlar.
+
+## Yaygın hatalar ve çözümleri
+
+<details>
+<summary>Zap çalışmıyor — tetikleyici verileri gelmiyor</summary>
+
+Tetikleyicinin "Polling" modunda olduğunu hatırlayın — Zapier, yeni verileri belirli aralıklarla kontrol eder (ücretsiz planda her 15 dakika, ücretli planlarda daha sık). Gerçek zamanlı (real-time) için Webhook tetikleyici kullanın.
+
+</details>
+
+<details>
+<summary>OpenAI API hatası Zapier'den geliyor</summary>
+
+Zapier, OpenAI'a kendi aracılığıyla bağlanmaz — kendi API anahtarınızı Zapier'e girmeniz gerekir. Zapier → Apps → OpenAI → Connected Accounts bölümünden API anahtarınızı kontrol edin.
+
+</details>
+
+<details>
+<summary>Zap limit (görev sayısı) aşıldı</summary>
+
+Zapier, her Zap çalışmasını bir "görev (task)" sayar. Ücretsiz planda aylık 100 görev var. Limiti aşmamak için sık tetiklenen Zap'lara filtre ekleyin — yalnızca gerçekten gerekli veriler için tetiklensin.
+
+</details>
+
+<details>
+<summary>Veri eşleme (mapping) yanlış çalışıyor</summary>
+
+Alanları eşlerken `{{ }}` içindeki dinamik değerlerin doğru adımı referans ettiğinden emin olun. Test verilerini kontrol etmek için her adımda "Test step" butonunu kullanın.
+
+</details>
+
+## Maliyet / limit
+
+- **Ücretsiz:** Aylık 100 görev, 5 Zap, 15 dakika güncelleme sıklığı.
+- **Starter:** Aylık sabit ücretle 750 görev, sınırsız Zap, 15 dakika.
+- **Professional:** Aylık daha yüksek görev sayısı, 2 dakika güncelleme sıklığı, filtreler, çok adımlı Zap'lar.
+- **Team/Company:** Paylaşılan çalışma alanı, SSO, gelişmiş yönetim.
+
+<Callout type="uyari">
+Zapier "görev" sayar, "operasyon" değil. Çok adımlı bir Zap'ta her eylem ayrı görev sayılmaz — bir Zap çalışması = 1 görev (bazı premium eylemler 2 görev sayabilir). Yine de yüksek hacimde Make veya n8n daha ekonomik olabilir.
+</Callout>
+
+- **AI maliyeti:** Zapier'in kendi "AI by Zapier" adımları Zapier aboneliğine dahildir (kota kapsamında). Doğrudan OpenAI/Anthropic uygulamaları kendi API anahtarınızı kullanır.
+
+## Karşılaştırma
+
+[n8n vs Make vs Zapier](/karsilastirmalar/n8n-vs-make-vs-zapier)
+
+[Hangi araç ne zaman?](/karsilastirmalar/hangi-arac-ne-zaman)
+
+## Daha fazla
+
+- [Zapier resmi dokümantasyonu](https://help.zapier.com) — Zapier
+- [Zapier Learn](https://zapier.com/learn) — Ücretsiz kurslar ve rehberler
+- [Zapier şablon galerisi](https://zapier.com/apps) — Hazır Zap şablonları
+- [Zapier Community](https://community.zapier.com) — Topluluk
+- [Make](/araclar/make) — Daha güçlü alternatif
+- [n8n](/araclar/n8n) — Self-host alternatif

@@ -1,0 +1,257 @@
+---
+title: "Slack Entegrasyonu"
+slug: slack
+category: entegrasyonlar
+level: orta
+summary: "Agent'larınızı Slack ile entegre edin. Resmi MCP sunucusu kurulumu, kanal okuma/yazma, bildirim otomasyonu ve müşteri destek handoff senaryoları."
+updated: 2026-05-23
+tags: ["slack", "mcp", "bildirim", "otomasyon", "takim-iletisimi"]
+related: ["mcp-sunucu-listesi", "github", "notion"]
+---
+
+## Ne İşe Yarar?
+
+**Slack**, ekiplerin anlık mesajlaşma ve iş akışı otomasyonu için kullandığı bir iletişim platformudur. Agent entegrasyonu şunları mümkün kılar:
+
+- Belirlenen kanallara otomatik bildirim ve özet gönderme.
+- Mesajları okuyup analiz etme veya göreve atama.
+- Müşteri destek botları ve handoff otomasyonu.
+- CI/CD, monitoring ve alert bildirimleri.
+- Ekip içi rapor paylaşımı.
+
+<Callout type="info">
+Slack için resmi bir MCP sunucusu mevcuttur ve Claude Code ile kullanılabilir. Daha basit entegrasyonlar için Slack Bolt SDK veya Incoming Webhooks yeterlidir.
+</Callout>
+
+---
+
+## Kurulum ve Bağlantı
+
+### Seçenek A — Resmi Slack MCP Sunucusu
+
+```bash
+npx @modelcontextprotocol/server-slack
+```
+
+Slack App oluşturma:
+1. [api.slack.com/apps](https://api.slack.com/apps) → "Create New App" → "From scratch".
+2. OAuth & Permissions → Bot Token Scopes:
+   - `channels:read`, `channels:history`
+   - `chat:write`, `files:write`
+   - `users:read`
+3. App'i workspace'e yükleyin ve Bot Token (`xoxb-...`) alın.
+
+```json
+{
+  "mcpServers": {
+    "slack": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-slack"],
+      "env": {
+        "SLACK_BOT_TOKEN": "xoxb-XXXXXXXXXXXX-XXXXXXXXXXXX-XXXXXXXXXXXXXXXX",
+        "SLACK_TEAM_ID": "TXXXXXXXXX"
+      }
+    }
+  }
+}
+```
+
+### Seçenek B — Slack SDK ile Doğrudan Kullanım
+
+```bash
+pip install slack-sdk
+```
+
+```python
+from slack_sdk import WebClient
+from slack_sdk.errors import SlackApiError
+
+SLACK_TOKEN = "xoxb-XXXXXXXXXXXX-XXXXXXXXXXXX-XXXXXXXXXXXXXXXX"
+client = WebClient(token=SLACK_TOKEN)
+
+def send_message(channel: str, text: str) -> bool:
+    try:
+        client.chat_postMessage(channel=channel, text=text)
+        return True
+    except SlackApiError as e:
+        print(f"Slack hatası: {e.response['error']}")
+        return False
+
+def get_channel_history(channel_id: str, limit: int = 50) -> list[dict]:
+    response = client.conversations_history(channel=channel_id, limit=limit)
+    return response["messages"]
+```
+
+### Seçenek C — Incoming Webhook (En Basit Yol)
+
+Yalnızca mesaj göndermek için webhook yeterlidir:
+
+```python
+import requests
+
+WEBHOOK_URL = "https://hooks.slack.com/services/TXXXXXXXX/BXXXXXXXX/XXXXXXXX"
+
+def post_to_slack(text: str, channel: str = None) -> None:
+    payload = {"text": text}
+    if channel:
+        payload["channel"] = channel
+    requests.post(WEBHOOK_URL, json=payload)
+```
+
+---
+
+## Pratik Senaryolar
+
+### Senaryo 1 — Müşteri Destek Triage ve Handoff
+
+Destek kanalındaki mesajları sınıflandıran ve acil vakaları ilgili kişiye yönlendiren agent:
+
+```python
+import anthropic
+from slack_sdk import WebClient
+
+client_ai = anthropic.Anthropic()
+slack = WebClient(token="xoxb-XXXXXXXXXXXX-XXXXXXXXXXXX-XXXXXXXXXXXXXXXX")
+
+SUPPORT_CHANNEL = "C0XXXXXXXXX"
+ESCALATION_CHANNEL = "C0YYYYYYYYY"
+
+def classify_support_message(text: str) -> dict:
+    response = client_ai.messages.create(
+        model="claude-haiku-4-5",
+        max_tokens=200,
+        messages=[
+            {
+                "role": "user",
+                "content": (
+                    "Aşağıdaki müşteri mesajını analiz et. JSON döndür:\n"
+                    '{"aciliyet": "kritik|yüksek|orta|düşük", '
+                    '"kategori": "teknik|fatura|hesap|genel", '
+                    '"ozet": "tek cümle"}\n\n'
+                    f"Mesaj: {text}"
+                ),
+            }
+        ],
+    )
+    import json
+    return json.loads(response.content[0].text)
+
+def process_support_messages():
+    messages = get_channel_history(SUPPORT_CHANNEL, limit=20)
+
+    for msg in messages:
+        if msg.get("bot_id"):  # Bot mesajlarını atla
+            continue
+
+        text = msg.get("text", "")
+        if not text or len(text) < 10:
+            continue
+
+        classification = classify_support_message(text)
+
+        if classification["aciliyet"] in ("kritik", "yüksek"):
+            slack.chat_postMessage(
+                channel=ESCALATION_CHANNEL,
+                text=(
+                    f"*Acil Destek Talebi*\n"
+                    f"Kategori: `{classification['kategori']}`\n"
+                    f"Aciliyet: `{classification['aciliyet']}`\n"
+                    f"Özet: {classification['ozet']}\n"
+                    f"Orijinal mesaj: {text[:200]}"
+                ),
+            )
+            print(f"Yönlendirildi: {classification['ozet']}")
+```
+
+### Senaryo 2 — Günlük Özet Botu
+
+Belirlenen kanallardan gün içindeki önemli mesajları toplayıp özet gönderen agent:
+
+```python
+def generate_daily_digest(channel_ids: list[str]) -> None:
+    all_messages = []
+
+    for channel_id in channel_ids:
+        messages = get_channel_history(channel_id, limit=100)
+        channel_info = slack.conversations_info(channel=channel_id)["channel"]
+        channel_name = channel_info["name"]
+
+        texts = [m["text"] for m in messages if not m.get("bot_id") and m.get("text")]
+        if texts:
+            all_messages.append(f"**#{channel_name}**\n" + "\n".join(texts[:20]))
+
+    combined = "\n\n".join(all_messages)
+
+    response = client_ai.messages.create(
+        model="claude-sonnet-4-5",
+        max_tokens=1000,
+        messages=[
+            {
+                "role": "user",
+                "content": (
+                    "Aşağıdaki Slack mesajlarından bugünün en önemli gelişmelerini "
+                    "kanal bazında özetle. Kısa, madde madde, Türkçe.\n\n"
+                    f"{combined[:6000]}"
+                ),
+            }
+        ],
+    )
+    digest = response.content[0].text
+
+    # Özeti yönetici kanalına gönder
+    slack.chat_postMessage(
+        channel="#yonetici-ozeti",
+        text=f"*Günlük Digest — {__import__('datetime').date.today()}*\n\n{digest}",
+    )
+```
+
+### Senaryo 3 — CI/CD Bildirim Entegrasyonu
+
+GitHub Actions veya başka bir CI sistemi tamamlandığında Slack'e bildirim:
+
+```python
+def notify_deployment(
+    service: str,
+    environment: str,
+    status: str,
+    commit_msg: str,
+) -> None:
+    emoji = "green_circle" if status == "success" else "red_circle"
+    color = "good" if status == "success" else "danger"
+
+    slack.chat_postMessage(
+        channel="#deployments",
+        attachments=[
+            {
+                "color": color,
+                "title": f":{emoji}: {service} — {environment}",
+                "fields": [
+                    {"title": "Durum", "value": status, "short": True},
+                    {"title": "Ortam", "value": environment, "short": True},
+                    {"title": "Commit", "value": commit_msg[:100], "short": False},
+                ],
+            }
+        ],
+    )
+```
+
+---
+
+## Yaygın Sorunlar
+
+| Sorun | Neden | Çözüm |
+|---|---|---|
+| `not_in_channel` hatası | Bot kanal üyesi değil | Bot'u `/invite @botadiniz` komutuyla kanala ekleyin |
+| `missing_scope` hatası | Bot token izni eksik | api.slack.com'da scope'ları güncelleyin, uygulamayı yeniden yükleyin |
+| `channel_not_found` | Kanal ID değil isim kullanıldı | `C0XXXXXXXXX` formatındaki ID kullanın (F12 ile API yanıtından alın) |
+| Rate limit (`429`) | Dakikada 1 mesaj sınırı (bazı endpoint'ler) | `time.sleep(1)` ekleyin veya burst önleyin |
+| Webhook `410 Gone` | Webhook silinmiş | Yeni webhook URL oluşturun |
+
+---
+
+## İlgili Sayfalar
+
+- [Otomasyon Senaryosu](/senaryolar/otomasyon)
+- [MCP Sunucu Listesi](/entegrasyonlar/mcp-sunucu-listesi)
+- [GitHub Entegrasyonu](/entegrasyonlar/github)
+- [n8n Aracı](/araclar/n8n)

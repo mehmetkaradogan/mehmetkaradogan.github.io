@@ -1,0 +1,73 @@
+---
+// src/components/Toc.astro
+// Table of contents generated from Astro's `headings` array.
+
+export interface Heading {
+  depth: number;
+  slug: string;
+  text: string;
+}
+
+export interface Props {
+  headings: Heading[];
+}
+
+const { headings } = Astro.props;
+
+// Only show h2 and h3
+const filtered = headings.filter((h) => h.depth === 2 || h.depth === 3);
+---
+
+{filtered.length > 0 && (
+  <nav aria-label="İçindekiler" class="toc">
+    <p class="font-semibold text-sm mb-3" style="color: var(--text-primary);">İçindekiler</p>
+    <ol class="space-y-1 text-sm">
+      {filtered.map((h) => (
+        <li class={h.depth === 3 ? 'pl-4' : ''}>
+          <a
+            href={`#${h.slug}`}
+            class="block py-0.5 leading-snug transition-colors hover:underline toc-link"
+            style="color: var(--text-secondary);"
+            data-heading={h.slug}
+          >
+            {h.text}
+          </a>
+        </li>
+      ))}
+    </ol>
+  </nav>
+)}
+
+<script>
+  // Highlight active heading on scroll
+  function initToc() {
+    const links = document.querySelectorAll<HTMLAnchorElement>('.toc-link');
+    if (!links.length) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          const id = entry.target.id;
+          const link = document.querySelector<HTMLElement>(`.toc-link[data-heading="${id}"]`);
+          if (!link) return;
+          if (entry.isIntersecting) {
+            links.forEach((l) => {
+              l.style.color = 'var(--text-secondary)';
+              l.style.fontWeight = 'normal';
+            });
+            link.style.color = 'var(--brand)';
+            link.style.fontWeight = '600';
+          }
+        });
+      },
+      { rootMargin: '-20% 0% -70% 0%' }
+    );
+
+    document.querySelectorAll('h2[id], h3[id]').forEach((el) => observer.observe(el));
+
+    return () => observer.disconnect();
+  }
+
+  initToc();
+  document.addEventListener('astro:after-swap', initToc);
+</script>

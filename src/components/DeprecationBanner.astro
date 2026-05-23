@@ -1,0 +1,59 @@
+---
+// src/components/DeprecationBanner.astro
+// Red/amber warning banner for deprecated or maintenance tools.
+
+export interface Props {
+  status: 'maintenance' | 'deprecated';
+  toolName?: string;
+}
+
+const { status, toolName = 'Bu araç' } = Astro.props;
+
+const isDep = status === 'deprecated';
+---
+
+<div
+  role="alert"
+  class={[
+    'not-prose flex items-start gap-3 rounded-xl border px-5 py-4 mb-8',
+    isDep
+      ? 'bg-red-50 border-red-300 text-red-800 dark:bg-red-950/50 dark:border-red-800 dark:text-red-300'
+      : 'bg-amber-50 border-amber-300 text-amber-800 dark:bg-amber-950/50 dark:border-amber-800 dark:text-amber-300',
+  ].join(' ')}
+>
+  <svg
+    class="shrink-0 mt-0.5"
+    width="18"
+    height="18"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+    <line x1="12" y1="9" x2="12" y2="13"/>
+    <line x1="12" y1="17" x2="12.01" y2="17"/>
+  </svg>
+  <div>
+    {isDep ? (
+      <>
+        <strong class="block font-semibold mb-0.5">Kullanım Dışı</strong>
+        <span class="text-sm">
+          {toolName} artık aktif olarak geliştirilmiyor ve yeni projeler için önerilmiyor.
+          Alternatif araçlar için <a href="/karsilastirmalar/hangi-arac-ne-zaman" class="underline">karşılaştırma sayfasını</a> inceleyin.
+        </span>
+      </>
+    ) : (
+      <>
+        <strong class="block font-semibold mb-0.5">Bakım Modu</strong>
+        <span class="text-sm">
+          {toolName} şu anda bakım modundadır. Kritik güvenlik güncellemeleri alıyor
+          ancak yeni özellikler gelmiyor. Uzun vadeli projeler için alternatifleri değerlendirin.
+        </span>
+      </>
+    )}
+  </div>
+</div>

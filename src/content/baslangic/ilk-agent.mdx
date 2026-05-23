@@ -1,0 +1,255 @@
+---
+title: "İlk Agent'ını Kur"
+slug: ilk-agent
+category: baslangic
+level: giris
+summary: "Sıfırdan tek araçlı, ReAct döngüsüyle çalışan bir Python agent'ı adım adım inşa edin. Hesap makinesi aracı ve sade bir döngü yapısıyla agentic programlamanın temellerini öğrenin."
+updated: 2026-05-23
+tags: ["ilk-agent", "react", "python", "tool-use", "hands-on", "giris"]
+related: ["agentic-ai-nedir", "temel-kavramlar", "ogrenme-yolu"]
+---
+
+## Bu Sayfada Ne Yapacaksınız?
+
+Bu kılavuzun sonunda elinizde şunlar olacak:
+
+- Tek bir araçla (hesap makinesi) çalışan, **ReAct döngüsü** uygulayan bir Python agent'ı.
+- Araç tanımlama, döngü yönetimi ve sonuç değerlendirme konusunda sağlam bir temel.
+- Daha karmaşık agentlara geçmek için gereken zihinsel model.
+
+**Önkoşullar:** Python 3.10+, temel Python bilgisi, bir Anthropic API anahtarı (ya da OpenAI API anahtarı).
+
+**Tahmini süre:** 20-30 dakika.
+
+---
+
+## ReAct Döngüsü Nedir?
+
+**ReAct (Reason + Act)**, agent'ın her adımda şunu yapmasını sağlar:
+
+1. **Reason (Düşün):** "Şu an ne yapmalıyım? Hangi araç işime yarar?"
+2. **Act (Hareket et):** Araç çağrısı yap.
+3. **Observe (Gözlemle):** Araçtan dönen sonucu oku.
+4. Tekrar **Reason** adımına dön — hedef tamamlanana kadar.
+
+Bu basit döngü, pek çok gerçek dünya agent'ının temelidir.
+
+---
+
+## Adım 1 — Ortam Kurulumu
+
+```bash
+pip install anthropic
+```
+
+API anahtarınızı ortam değişkeni olarak ayarlayın:
+
+```bash
+# Linux / macOS
+export ANTHROPIC_API_KEY="sk-ant-..."
+
+# Windows PowerShell
+$env:ANTHROPIC_API_KEY = "sk-ant-..."
+```
+
+<Callout type="not">
+OpenAI kullanmak istiyorsanız `pip install openai` ve `OPENAI_API_KEY` kullanın. Aşağıdaki örnekteki `anthropic` çağrısını OpenAI eşdeğeriyle değiştirin.
+</Callout>
+
+---
+
+## Adım 2 — Aracı Tanımlayın
+
+Agent'ın kullanacağı ilk araç: **hesap makinesi (calculator)**. Dört işlem yapabilecek sade bir Python fonksiyonu.
+
+```python
+import json
+
+def calculator(expression: str) -> str:
+    """
+    Güvenli matematiksel ifade değerlendirici.
+    Yalnızca sayılar ve +, -, *, / operatörlerine izin verir.
+    """
+    allowed = set("0123456789+-*/(). ")
+    if not all(c in allowed for c in expression):
+        return "Hata: Yalnızca temel matematiksel ifadeler destekleniyor."
+    try:
+        result = eval(expression, {"__builtins__": {}})
+        return str(result)
+    except Exception as e:
+        return f"Hata: {e}"
+
+
+# MCP / function calling için araç şeması (tool schema)
+TOOLS = [
+    {
+        "name": "calculator",
+        "description": (
+            "Matematiksel bir ifadeyi hesaplar. "
+            "Toplama, çıkarma, çarpma ve bölme desteklenir. "
+            "Örnek: '(15 + 3) * 2'"
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "expression": {
+                    "type": "string",
+                    "description": "Hesaplanacak matematiksel ifade.",
+                }
+            },
+            "required": ["expression"],
+        },
+    }
+]
+```
+
+---
+
+## Adım 3 — ReAct Döngüsünü Yazın
+
+```python
+import anthropic
+
+client = anthropic.Anthropic()
+
+def run_agent(task: str, max_iterations: int = 10) -> str:
+    """
+    Verilen görevi ReAct döngüsüyle çözen tek araçlı agent.
+    """
+    messages = [{"role": "user", "content": task}]
+    
+    print(f"\n[Agent] Görev: {task}")
+    print("-" * 50)
+
+    for iteration in range(max_iterations):
+        # Modeli çağır — araçları tanımlıyoruz
+        response = client.messages.create(
+            model="claude-sonnet-4-5",
+            max_tokens=1024,
+            tools=TOOLS,
+            messages=messages,
+        )
+
+        # Modelin yanıtını mesaj geçmişine ekle
+        messages.append({"role": "assistant", "content": response.content})
+
+        # Araç çağrısı var mı kontrol et
+        if response.stop_reason == "tool_use":
+            tool_results = []
+
+            for block in response.content:
+                if block.type == "tool_use":
+                    tool_name = block.name
+                    tool_input = block.input
+                    tool_use_id = block.id
+
+                    print(f"[Araç] {tool_name} çağrılıyor: {tool_input}")
+
+                    # Aracı çalıştır
+                    if tool_name == "calculator":
+                        result = calculator(tool_input["expression"])
+                    else:
+                        result = f"Bilinmeyen araç: {tool_name}"
+
+                    print(f"[Sonuç] {result}")
+
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": tool_use_id,
+                        "content": result,
+                    })
+
+            # Araç sonuçlarını mesaj geçmişine ekle
+            messages.append({"role": "user", "content": tool_results})
+
+        else:
+            # Model araç çağırmadı — nihai yanıtı döndür
+            final_text = next(
+                (block.text for block in response.content if hasattr(block, "text")),
+                "Yanıt üretilemedi.",
+            )
+            print(f"\n[Agent] Nihai yanıt: {final_text}")
+            return final_text
+
+    return "Maksimum iterasyon sayısına ulaşıldı."
+
+
+# --- Çalıştır ---
+if __name__ == "__main__":
+    sonuc = run_agent(
+        "Bir dikdörtgenin alanını hesapla: genişlik 14.5, yükseklik 8.3. "
+        "Sonra bu alanın karekökünü de bul."
+    )
+    print(f"\nSonuç: {sonuc}")
+```
+
+---
+
+## Adım 4 — Çalıştırın ve Gözlemleyin
+
+Dosyayı `ilk_agent.py` olarak kaydedin ve çalıştırın:
+
+```bash
+python ilk_agent.py
+```
+
+Beklenen çıktı (model yanıtları değişebilir):
+
+```
+[Agent] Görev: Bir dikdörtgenin alanını hesapla: genişlik 14.5, yükseklik 8.3.
+        Sonra bu alanın karekökünü de bul.
+--------------------------------------------------
+[Araç] calculator çağrılıyor: {'expression': '14.5 * 8.3'}
+[Sonuç] 120.35
+[Araç] calculator çağrılıyor: {'expression': '120.35 ** 0.5'}
+[Sonuç] 10.97...
+
+[Agent] Nihai yanıt: Dikdörtgenin alanı 120.35 birim²'dir.
+        Bu alanın karekökü yaklaşık 10.97 birimdir.
+```
+
+Agent'ın iki farklı araç çağrısı yaptığına dikkat edin — önce alan, sonra karekök. Her adımda gözlemledi ve bir sonraki çağrıyı buna göre planladı.
+
+---
+
+## Adım 5 — Web Arama Stub'ı Ekleyin (İsteğe Bağlı)
+
+Gerçek bir web araması yapmadan arama deneyimi simüle eden bir stub araç:
+
+```python
+def web_search(query: str) -> str:
+    """
+    Gerçek bir web araması yapıyor gibi simüle eden stub.
+    Üretimde Brave Search API, Serper veya Tavily ile değiştirin.
+    """
+    # Gerçek entegrasyon için: requests.get("https://api.tavily.com/search", ...)
+    return f"[Stub] '{query}' için arama sonuçları: Bu bir simülasyondur."
+```
+
+Üretim ortamında bu stub'ı [Tavily](https://tavily.com/), [Brave Search API](https://brave.com/search/api/) veya [Serper](https://serper.dev/) ile değiştirin.
+
+---
+
+## Yaygın Hatalar
+
+| Hata | Neden | Çözüm |
+|---|---|---|
+| `AuthenticationError` | API anahtarı yanlış veya eksik | `ANTHROPIC_API_KEY` ortam değişkenini kontrol edin |
+| Sonsuz döngü | Model her zaman araç çağırıyor | `max_iterations` sınırını koruyun |
+| `tool_use_id` uyumsuzluğu | Araç sonucu yanlış id ile eşleştirilmiş | `block.id` değerini doğrudan kullanın |
+| Hesap makinesi `eval` hatası | Geçersiz ifade karakteri | `allowed` kümesini genişletin ya da `sympy` kullanın |
+
+---
+
+## Buradan Nereye?
+
+Bu kılavuzda öğrendikleriniz:
+
+- Araç şeması (tool schema) tanımlama.
+- Anthropic API ile araç çağırma döngüsü.
+- Mesaj geçmişini yönetme.
+- Araç sonuçlarını döngüye besleme.
+
+Bir sonraki adımda araç çağırma konusunu daha derinlemesine inceleyin:
+
+[Modül 02 — İlk Tool Calling →](/modul/02-ilk-tool-calling)

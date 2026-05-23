@@ -1,0 +1,377 @@
+---
+title: "İleri Seviye Projeler"
+slug: ileri
+category: projeler
+seviye: ileri
+level: ileri
+summary: "LangGraph durable agent, Claude Code subagent ekibi + CI/CD, Antigravity SDK ile özel MCP sunucusu ve multi-model router üretim sistemi — dört ileri seviye bitirme projesi."
+updated: 2026-05-23
+tags: [proje, ileri, langgraph, claude-code, antigravity, multi-model, maliyet]
+related: [07-claude-code-uretim, 08-antigravity-ile-build, 09-multi-model-orkestrasyon]
+---
+
+## İleri Seviye Projeler
+
+Bu sayfadaki projeler tüm 9 modülü tamamlamış kişiler için tasarlanmıştır. Her proje birden fazla framework, üretim kalitesi hata yönetimi ve izleme (observability) içerir. Tahmini süre: 24-80 saat.
+
+---
+
+## Proje 1 — LangGraph Durable Task Agent
+
+**Amaç:** Kesintiye dayanıklı (durable), günler veya haftalar sürebilen uzun görevleri yöneten, kaldığı yerden devam edebilen ve insan onayı (human-in-the-loop) gerektiren kritik adımları olan LangGraph agent'ı.
+
+**Kullanılan Araçlar:**
+- [LangGraph](/araclar/langgraph) + LangSmith
+- PostgreSQL — checkpoint backend
+- FastAPI — HITL (Human-in-the-Loop) onay API'si
+- Redis — görev kuyruğu
+- Docker Compose — ortam
+
+**Adımlar:**
+
+1. LangGraph'ın `PostgresSaver` ile görev durumunu veritabanına persiste et.
+2. Kritik adımlarda (örn. "Dosyaları sil", "API'ye POST et") `interrupt()` ile insan onayı bekle.
+3. FastAPI endpoint'i: `GET /gorev/{thread_id}` durum göster, `POST /gorev/{thread_id}/onayla` devam ettir.
+4. Görev kuyruğu için Redis + Celery worker ekle.
+5. LangSmith ile her adımı izle; başarısız adımlarda otomatik yeniden dene.
+
+**Zorluk:** Yüksek
+
+**Checkpoint Kurulumu:**
+
+```python
+from langgraph.checkpoint.postgres import PostgresSaver
+import psycopg
+
+POSTGRES_URI = os.environ["DATABASE_URL"]
+
+with psycopg.connect(POSTGRES_URI) as baglanti:
+    PostgresSaver.create_tables(baglanti)
+
+checkpoint = PostgresSaver.from_conn_string(POSTGRES_URI)
+graph = oluşturucu.compile(checkpointer=checkpoint)
+```
+
+**HITL Kesme Noktası:**
+
+```python
+from langgraph.types import interrupt
+
+def kritik_adim(durum: AgentDurumu) -> dict:
+    # İnsan onayı iste
+    onay = interrupt({
+        "soru": "Bu işlemi onaylıyor musunuz?",
+        "ayrinti": durum.get("gerceklestirilecek_eylem")
+    })
+    if onay.get("onaylandi"):
+        # Eylemi gerçekleştir
+        return eylemi_gerceklestir(durum)
+    return {"mesajlar": [SystemMessage("İşlem kullanıcı tarafından iptal edildi.")]}
+```
+
+**Genişletme Fikirleri:**
+- Görev şablonları: yaygın görevleri YAML ile tanımla
+- Paralel subgraph'lar: birden fazla alt görevi aynı anda çalıştır
+- Scheduled agent: cron benzeri zamanlanmış tetikleme
+
+---
+
+## Proje 2 — Claude Code Subagent Ekibi + CI/CD
+
+**Amaç:** Claude Code'u birden fazla uzman subagent olarak yapılandıran ve GitHub Actions üzerinden otomatik çalışan tam CI/CD hattı.
+
+**Kullanılan Araçlar:**
+- [Claude Code](/araclar/claude-code) — `claude` CLI
+- GitHub Actions
+- [MCP Sunucusu](/modul/06-mcp-sunucu-yazma) — özel araçlar
+- LangSmith — izleme
+- Slack SDK — bildirim
+
+**Adımlar:**
+
+1. `.claude/agents.yaml` ile subagent rolleri tanımla: güvenlik inceleyici, test yazıcı, dokümantasyon güncelleyici.
+2. Her subagent için farklı model ata (maliyet disiplini: Haiku/Sonnet/Opus).
+3. GitHub Actions: PR açıldığında güvenlik taraması, merge edildiğinde test oluşturma, release'de dokümantasyon güncellemesi.
+4. Başarılı/başarısız pipeline'ları Slack'e bildir.
+5. LangSmith'te tüm agent çalışmalarını izle.
+
+**Zorluk:** Yüksek
+
+**Agent YAML Yapılandırması:**
+
+```yaml
+# .claude/agents.yaml
+agents:
+  guvenlik:
+    model: claude-sonnet-4-5
+    system_prompt: |
+      Güvenlik uzmanısın. Kodu şu açılardan incele:
+      - SQL injection
+      - XSS güvenlik açıkları
+      - Gizli anahtar ifşası
+      - Güvensiz bağımlılıklar
+    allow_paths: [src/, lib/]
+    max_turns: 3
+
+  test_yazici:
+    model: claude-sonnet-4-5
+    system_prompt: |
+      Python test uzmanısın. pytest ile kapsamlı unit test yaz.
+      Mock objeler kullan. Edge case'leri unutma.
+    allow_paths: [src/, tests/]
+    max_turns: 10
+
+  dokuman:
+    model: claude-haiku-4-5
+    system_prompt: |
+      Teknik yazar olarak çalış. Docstring'leri güncelle,
+      README'yi düzenle. Türkçe ve İngilizce yaz.
+    allow_paths: [docs/, "*.md", src/]
+    max_turns: 5
+```
+
+**GitHub Actions Entegrasyonu:**
+
+```yaml
+# .github/workflows/agent-pipeline.yml
+name: Claude Code Agent Pipeline
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+  push:
+    branches: [main]
+
+jobs:
+  guvenlik-tarama:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm install -g @anthropic-ai/claude-code
+      - name: Güvenlik taraması
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          claude --agent guvenlik \
+                 --headless \
+                 -p "Son PR'daki değişiklikleri güvenlik açısından tara" \
+                 > guvenlik_raporu.md
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const rapor = require('fs').readFileSync('guvenlik_raporu.md', 'utf8');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## Güvenlik Raporu\n\n${rapor}`
+            });
+
+  test-olustur:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm install -g @anthropic-ai/claude-code
+      - name: Test oluştur
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          claude --agent test_yazici \
+                 --headless \
+                 -p "Son commit'teki değişiklikler için pytest testleri yaz"
+      - name: Testleri çalıştır
+        run: |
+          pip install pytest
+          pytest tests/ -v
+```
+
+**Genişletme Fikirleri:**
+- Performans regresyon testi ekle
+- Çoklu repo koordinasyonu (monorepo desteği)
+- Scheduled haftalık kod kalite raporu
+
+---
+
+## Proje 3 — Antigravity SDK + Özel MCP Sunucusu
+
+**Amaç:** Google Antigravity SDK ile özel bir agent oluşturup Modül 06'da yazılan MCP sunucusuna bağlamak ve browser control ile gerçek web görevleri tamamlayan bir sistem kurmak.
+
+**Kullanılan Araçlar:**
+- [Google Antigravity 2.0](/araclar/google-antigravity) SDK
+- MCP Sunucusu (Modül 06'dan genişletilmiş)
+- `playwright` — tarayıcı otomasyonu
+- PostgreSQL — bilgi tabanı
+
+**Adımlar:**
+
+1. Modül 06'daki MCP sunucusunu genişlet: `web_al`, `pdf_indeksle`, `veritabani_sorgula` araçları ekle.
+2. Antigravity SDK ile agent oluştur, MCP sunucusunu bağla.
+3. Bilgi tabanı: PostgreSQL'de araştırma sonuçlarını sakla ve agent'ın bunlara erişmesini sağla.
+4. Browser control ile bir araştırma görevini uçtan uca tamamla.
+5. Sonuçları yapılandırılmış rapor olarak dışa aktar.
+
+**Zorluk:** Yüksek
+
+**Mimari:**
+
+```
+[Kullanıcı görevi]
+       │
+       ▼
+[Antigravity Agent (Gemini 3 Pro)]
+   ├── MCP Sunucu bağlantısı
+   │     ├── web_al(): HTTP GET ile sayfa çek
+   │     ├── pdf_indeksle(): PDF → ChromaDB
+   │     └── veritabani_sorgula(): PostgreSQL sorgusu
+   ├── Browser Control
+   │     └── Dinamik sayfaları render et
+   └── Bilgi Tabanı
+         └── Öğrenilenleri PostgreSQL'e kaydet
+```
+
+**MCP Sunucu Genişletmesi:**
+
+```python
+@sunucu.list_tools()
+async def arac_listesi():
+    return [
+        # ... önceki araçlar ...
+        types.Tool(
+            name="web_al",
+            description="Bir URL'den HTML içeriğini çeker.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string"},
+                    "js_gerekli": {"type": "boolean", "default": False}
+                },
+                "required": ["url"]
+            }
+        ),
+        types.Tool(
+            name="veritabani_sorgula",
+            description="PostgreSQL veritabanında SQL sorgusu çalıştırır.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "sorgu": {"type": "string"},
+                    "parametreler": {"type": "array", "items": {}}
+                },
+                "required": ["sorgu"]
+            }
+        )
+    ]
+```
+
+**Genişletme Fikirleri:**
+- A2A (Agent-to-Agent) protokolü ile Claude Code subagent'ıyla iletişim
+- Çok dilli araştırma desteği
+- Versiyon kontrollü bilgi tabanı
+
+---
+
+## Proje 4 — Multi-Model Router + Maliyet Optimizasyonu Üretim Sistemi
+
+**Amaç:** Gerçek trafikle çalışan, router, cascading ve ensemble pattern'lerini dinamik olarak seçen, gerçek zamanlı maliyet takibi yapan ve Prometheus + Grafana ile izlenen üretim API'si.
+
+**Kullanılan Araçlar:**
+- [LangGraph](/araclar/langgraph) — orkestrasyon
+- FastAPI — API katmanı
+- Redis — önbellek + hız sınırlama
+- Prometheus + Grafana — izleme
+- PostgreSQL — talep geçmişi ve maliyet logu
+
+**Adımlar:**
+
+1. FastAPI ile `/api/sorgu` endpoint'i: kullanıcıdan görev ve bütçe parametreleri al.
+2. Bütçeye göre orkestrasyon modu seç: düşük bütçe → router, yüksek güvenilirlik → cascading, kritik → ensemble.
+3. Redis önbelleği: aynı soru tekrar gelirse model çağrısı yapma.
+4. Prometheus metrikleri: `model_cagri_sayisi`, `token_kullanimi`, `maliyet_usd`, `yanit_suresi`.
+5. Grafana dashboard: gerçek zamanlı maliyet ve performans görünümü.
+
+**Zorluk:** Çok Yüksek
+
+**FastAPI + Prometheus:**
+
+```python
+from fastapi import FastAPI
+from prometheus_client import Counter, Histogram, generate_latest
+import time
+
+uygulama = FastAPI()
+
+MODEL_CAGRI = Counter("model_cagri_toplam", "Toplam model çağrısı", ["model", "mod"])
+TOKEN_KULLANIM = Counter("token_kullanim_toplam", "Toplam token", ["model", "tur"])
+MALIYET = Counter("maliyet_usd_toplam", "Toplam maliyet USD", ["model"])
+YANIT_SURESI = Histogram("yanit_suresi_saniye", "Yanıt süresi", ["model"])
+
+@uygulama.post("/api/sorgu")
+async def sorgu(gorev: str, max_maliyet_usd: float = 0.05, mod: str = "auto"):
+    baslangic = time.time()
+
+    if mod == "auto":
+        mod = "router" if max_maliyet_usd < 0.01 else "cascading"
+
+    sonuc = orkestrator.calistir(gorev, mod=mod)
+
+    MODEL_CAGRI.labels(model=sonuc["model"], mod=mod).inc()
+    TOKEN_KULLANIM.labels(model=sonuc["model"], tur="giris").inc(sonuc.get("giris_token", 0))
+    MALIYET.labels(model=sonuc["model"]).inc(sonuc.get("maliyet", 0))
+    YANIT_SURESI.labels(model=sonuc["model"]).observe(time.time() - baslangic)
+
+    return sonuc
+
+@uygulama.get("/metrics")
+async def metrikler():
+    return generate_latest()
+```
+
+**Docker Compose:**
+
+```yaml
+# docker-compose.yml
+services:
+  api:
+    build: .
+    ports: ["8000:8000"]
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - DATABASE_URL=postgresql://user:pass@db:5432/agentic
+      - REDIS_URL=redis://redis:6379
+
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: agentic
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: pass
+
+  redis:
+    image: redis:7-alpine
+
+  prometheus:
+    image: prom/prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+
+  grafana:
+    image: grafana/grafana
+    ports: ["3000:3000"]
+```
+
+**Genişletme Fikirleri:**
+- Otomatik model seçimi: geçmiş veriye göre en iyi model/maliyet dengesini öğren
+- A/B test: iki orkestrasyon stratejisini eş zamanlı test et
+- SLA monitörü: gecikme eşiği aşılınca anında alarm
+
+<Callout type="not">
+Bu proje, 09. Modüldeki maliyet disiplinini (§1.7) tam anlamıyla hayata geçirir. Gerçek trafikte modelleri izlemeye başladığında, router'ın ne kadar maliyet kurtardığını somut olarak göreceksin.
+</Callout>
+
+---
+
+**Tüm projelerin bir listesi için:** [Fikir Bankasına](/projeler/fikir-bankasi) göz at.
+
+[Öğrenme Yoluna Dön](/roadmap)

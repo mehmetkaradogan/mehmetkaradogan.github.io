@@ -1,0 +1,54 @@
+---
+// src/pages/videolar.astro
+// Reads videolar data, renders VideoFilter island + VideoCard grid.
+// VideoObject JSON-LD included.
+
+import BaseLayout from '@layouts/BaseLayout.astro';
+import Breadcrumb from '@components/Breadcrumb.astro';
+import VideoFilter from '@components/islands/VideoFilter.tsx';
+import { videolar } from '../data/videolar';
+
+const SITE_URL = 'https://agenticai.tr';
+
+// VideoObject JSON-LD for each video
+const videoJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'ItemList',
+  name: 'Agentic AI Video Listesi',
+  description: 'Seçilmiş Agentic AI eğitim videoları — Türkçe ve İngilizce.',
+  url: `${SITE_URL}/videolar`,
+  numberOfItems: videolar.length,
+  itemListElement: videolar.map((v, i) => ({
+    '@type': 'ListItem',
+    position: i + 1,
+    item: {
+      '@type': 'VideoObject',
+      name: v.title,
+      description: v.why_watch,
+      url: v.url,
+      ...(v.published ? { uploadDate: v.published } : {}),
+    },
+  })),
+};
+---
+
+<BaseLayout
+  title="Videolar"
+  description="Agentic AI hakkında seçilmiş Türkçe ve İngilizce eğitim videoları — seviye, kategori ve araca göre filtrele."
+>
+  <script is:inline type="application/ld+json" set:html={JSON.stringify(videoJsonLd)} />
+
+  <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <Breadcrumb crumbs={[{ label: 'Videolar' }]} />
+
+    <header class="mb-8">
+      <h1 class="text-3xl font-bold mb-3" style="color: var(--text-primary);">Videolar</h1>
+      <p class="text-base" style="color: var(--text-secondary);">
+        Seçilmiş Agentic AI eğitim videoları. Seviye, kategori, araç veya dile göre filtreleyin.
+      </p>
+    </header>
+
+    <!-- VideoFilter island (Preact, client:load) -->
+    <VideoFilter client:load videos={videolar} />
+  </div>
+</BaseLayout>

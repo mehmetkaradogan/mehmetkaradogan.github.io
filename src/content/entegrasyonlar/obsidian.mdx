@@ -1,0 +1,205 @@
+---
+title: "Obsidian Entegrasyonu"
+slug: obsidian
+category: entegrasyonlar
+level: orta
+summary: "Obsidian vault'unuzu AI agent'larıyla entegre edin. MCP sunucusu kurulumu, not okuma/yazma, günlük özet üretme ve kişisel bilgi yönetimi senaryoları."
+updated: 2026-05-23
+tags: ["obsidian", "mcp", "kisisel-bilgi-yonetimi", "not-alma", "vault"]
+related: ["mcp-sunucu-listesi", "notion", "github"]
+---
+
+## Ne İşe Yarar?
+
+**Obsidian**, yerel Markdown dosyaları üzerinde çalışan, bağlantılar ağı (knowledge graph) oluşturan bir not alma uygulamasıdır. Agent'larla entegre edildiğinde vault'unuz dinamik bir bilgi tabanına dönüşür:
+
+- Agent notlarınızı okuyup sentezleyebilir.
+- Günlük, haftalık özetler otomatik üretebilir.
+- Bağlantısız notlar arasında ilişki keşfedebilir.
+- Yeni notlar ve şablonlar yazabilir.
+
+<Callout type="info">
+Obsidian, dosyaları yerel diskte tutar. Bu, gizlilik açısından avantajlıdır; agent'ınız hiçbir bulut servisine ihtiyaç duymadan doğrudan dosya sisteminizle çalışır.
+</Callout>
+
+---
+
+## Kurulum ve Bağlantı
+
+### Seçenek A — MCP Sunucusu ile (Önerilen)
+
+**`mcp-obsidian`** topluluk MCP sunucusu, Claude Code ve diğer MCP istemcileri için Obsidian vault'unu araç olarak açar.
+
+```bash
+# uvx ile doğrudan çalıştırın (uv kurulu olmalı)
+uvx mcp-obsidian /path/to/your/vault
+```
+
+Claude Code yapılandırması (`~/.claude/claude_desktop_config.json` veya proje `.mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "obsidian": {
+      "command": "uvx",
+      "args": ["mcp-obsidian", "/Users/kullanici/Documents/MyVault"]
+    }
+  }
+}
+```
+
+Sunucu şu araçları sunar:
+- `read_note` — belirli bir notu okur.
+- `write_note` — yeni not oluşturur veya günceller.
+- `search_notes` — vault içinde arama yapar.
+- `list_notes` — klasör içeriğini listeler.
+
+### Seçenek B — Dosya Sistemi Araçlarıyla
+
+MCP sunucusu kullanmak istemiyorsanız, vault'un bulunduğu dizine agent'ın doğrudan dosya sistemi erişimi yeterlidir:
+
+```python
+import os
+from pathlib import Path
+
+VAULT_PATH = Path("/Users/kullanici/Documents/MyVault")
+
+def read_note(filename: str) -> str:
+    note_path = VAULT_PATH / filename
+    if not note_path.exists():
+        return f"Not bulunamadı: {filename}"
+    return note_path.read_text(encoding="utf-8")
+
+def write_note(filename: str, content: str) -> str:
+    note_path = VAULT_PATH / filename
+    note_path.parent.mkdir(parents=True, exist_ok=True)
+    note_path.write_text(content, encoding="utf-8")
+    return f"Not kaydedildi: {filename}"
+
+def search_notes(query: str) -> list[str]:
+    results = []
+    for md_file in VAULT_PATH.rglob("*.md"):
+        text = md_file.read_text(encoding="utf-8", errors="ignore")
+        if query.lower() in text.lower():
+            results.append(str(md_file.relative_to(VAULT_PATH)))
+    return results
+```
+
+---
+
+## Pratik Senaryolar
+
+### Senaryo 1 — Günlük Özet Üretme
+
+Vault'taki günlük notlardan (Daily Notes) otomatik haftalık özet oluşturma:
+
+```python
+import anthropic
+from datetime import date, timedelta
+from pathlib import Path
+
+client = anthropic.Anthropic()
+VAULT_PATH = Path("/Users/kullanici/Documents/MyVault/Daily Notes")
+
+def get_weekly_notes() -> str:
+    today = date.today()
+    notes = []
+    for i in range(7):
+        day = today - timedelta(days=i)
+        filename = VAULT_PATH / f"{day.isoformat()}.md"
+        if filename.exists():
+            notes.append(f"## {day}\n{filename.read_text(encoding='utf-8')}")
+    return "\n\n".join(notes)
+
+def generate_weekly_summary() -> str:
+    weekly_content = get_weekly_notes()
+    if not weekly_content:
+        return "Bu haftaya ait günlük not bulunamadı."
+
+    response = client.messages.create(
+        model="claude-sonnet-4-5",
+        max_tokens=1500,
+        messages=[
+            {
+                "role": "user",
+                "content": (
+                    "Aşağıdaki haftalık günlük notları Türkçe olarak özetle. "
+                    "Önemli konuları, kararları ve tekrar eden temaları vurgula.\n\n"
+                    f"{weekly_content}"
+                ),
+            }
+        ],
+    )
+    return response.content[0].text
+
+summary = generate_weekly_summary()
+print(summary)
+```
+
+### Senaryo 2 — Bağlantısız Notları Keşfetme
+
+```python
+def find_orphan_notes() -> list[str]:
+    """Hiçbir başka nottan bağlantı almamış (orphan) notları bulur."""
+    all_notes = list(VAULT_PATH.rglob("*.md"))
+    linked_notes = set()
+
+    for note in all_notes:
+        content = note.read_text(encoding="utf-8", errors="ignore")
+        # [[Not Adı]] formatındaki bağlantıları bul
+        import re
+        links = re.findall(r"\[\[([^\]]+)\]\]", content)
+        linked_notes.update(links)
+
+    orphans = [
+        str(n.relative_to(VAULT_PATH))
+        for n in all_notes
+        if n.stem not in linked_notes
+    ]
+    return orphans
+```
+
+### Senaryo 3 — Otomatik Etiket Önerisi
+
+Agent, bir notu okur ve mevcut vault etiketleriyle tutarlı yeni etiketler önerir:
+
+```python
+def suggest_tags(note_filename: str) -> list[str]:
+    content = read_note(note_filename)
+    response = client.messages.create(
+        model="claude-haiku-4-5",
+        max_tokens=200,
+        messages=[
+            {
+                "role": "user",
+                "content": (
+                    "Aşağıdaki not için 3-5 Obsidian etiketi öner. "
+                    "Yalnızca etiketleri listele, açıklama ekleme.\n\n"
+                    f"{content[:2000]}"
+                ),
+            }
+        ],
+    )
+    return response.content[0].text.strip().split("\n")
+```
+
+---
+
+## Yaygın Sorunlar
+
+| Sorun | Neden | Çözüm |
+|---|---|---|
+| `Permission denied` hatası | Vault klasörüne okuma/yazma izni yok | macOS'ta Gizlilik & Güvenlik → Dosya ve Klasörler ayarını kontrol edin |
+| Türkçe karakter bozulması | Dosya UTF-8 değil | `read_text(encoding="utf-8")` kullanın; Obsidian varsayılan UTF-8'dir |
+| İç bağlantılar çözülemiyor | `[[Not Adı]]` sözdizimi | `re.findall(r"\[\[([^\]]+)\]\]", content)` ile parse edin |
+| MCP sunucusu bağlanmıyor | `uvx` kurulu değil | `pip install uv` veya `brew install uv` |
+| Agent vault'u değiştirdi | Kazara üzerine yazma | Önce vault'u git reposuna alın: `git init` + otomatik commit |
+
+---
+
+## ilgili Sayfalar
+
+- [Kisisel Bilgi Yonetimi Senaryosu](/senaryolar/kisisel-bilgi-yonetimi)
+- [MCP Sunucu Listesi](/entegrasyonlar/mcp-sunucu-listesi)
+- [MCP Protokolü](/kavramlar/mcp-protokol)
+- [Obsidian AI Aracı](/araclar/obsidian-ai)

@@ -1,0 +1,241 @@
+---
+title: "Obsidian AI"
+slug: obsidian-ai
+category: araclar
+level: giris
+summary: "Obsidian not alma uygulamasının AI entegrasyon ekosistemi; Copilot eklentisi, Smart Connections ve MCP aracılığıyla kişisel bilgi tabanını LLM ile güçlendirme."
+updated: 2026-05-23
+tags: ["kişisel-bilgi-yönetimi", "not-alma", "rag", "mcp"]
+related: ["claude-code", "n8n", "claude-agent-sdk"]
+vendor: "Obsidian (Dynalist Inc.) + Topluluk Eklentileri"
+toolType: "agentic-ide"
+license: "Obsidian: Proprietary (kişisel kullanım ücretsiz); Eklentiler: çeşitli"
+os: ["macOS", "Linux", "Windows", "iOS", "Android"]
+primary_model: "Model bağımsız (GPT-4o, Claude Sonnet, Gemini; eklenti bazında)"
+last_review: 2026-05-23
+status: "active"
+---
+
+## Nedir?
+
+Obsidian AI, Obsidian not alma ve kişisel bilgi yönetimi (PKM — personal knowledge management) uygulamasının yapay zeka entegrasyon ekosistemini tanımlar. Obsidian uygulamasının kendisi AI içermez; ancak topluluk eklentileri (community plugin) ve MCP (Model Context Protocol) entegrasyonu aracılığıyla güçlü AI özellikleri kazandırılabilir. Başlıca entegrasyonlar: **Obsidian Copilot** (vault genelinde sohbet), **Smart Connections** (anlamsal arama ve otomatik bağlantı önerisi), **Text Generator** (LLM tabanlı içerik üretimi) ve **Claude Code / Claude Agent SDK ile MCP** üzerinden vault'a doğrudan yazma/okuma erişimi. Yerel-öncelikli (local-first) markdown tabanlı vault yapısı, AI ile yönetimi kolaylaştırır.
+
+## Ne için iyi
+
+- **Kişisel bilgi tabanı + AI:** Kendi notlarınız üzerinde anlamsal arama (semantic search) ve soru-cevap.
+- **Bağlantı keşfi:** Smart Connections eklentisi, ilgili notları otomatik önererek fikir bağlantılarını görünür kılar.
+- **Araştırma asistanı:** Vault içindeki bilgilere dayalı sorulara yanıt alma — kendinize özel RAG.
+- **İçerik üretimi:** Notlardan taslak oluşturma, genişletme, özetleme.
+- **Ajan entegrasyonu:** Claude Code veya n8n ile MCP üzerinden vault'a otomatik içerik yazma.
+- **Gizlilik:** Local vault — notlarınız buluta çıkmaz (model API çağrısı dışında).
+- **Ücretsiz temel:** Obsidian kişisel kullanımda ücretsiz; eklentilerin çoğu da açık kaynak.
+
+## Ne için kötü
+
+- **Gerçek zamanlı işbirliği:** Notion veya Confluence kadar gerçek zamanlı ekip çalışmasına uygun değil.
+- **Yapılandırılmış veri:** Tablo ve veritabanı yönetimi için Notion veya Airtable daha güçlü.
+- **Mobil AI deneyimi:** iOS/Android uygulamaları AI eklentilerini tam desteklemez.
+- **Konfigürasyon eşiği:** AI entegrasyonu kurulumu teknik bilgi gerektirir — Notion AI kadar hazır değil.
+- **Büyük ekipler:** Vault paylaşımı Obsidian Sync ile mümkün ancak eklenti yönetimi karmaşıklaşabilir.
+
+## Kurulum
+
+```bash
+# Obsidian uygulamasını indir — obsidian.md
+# Kendi platformuna göre yükleyici indir
+
+# Obsidian MCP sunucusunu kur (Claude ve diğer LLM'lerle vault entegrasyonu için)
+npm install -g obsidian-mcp-server
+
+# Obsidian Copilot eklentisi için:
+# Obsidian → Ayarlar → Community Plugins → Browse → "Copilot" ara → Kur
+```
+
+<Callout type="ipucu">
+AI eklentilerini kurmak için Obsidian'ın "Safe Mode"unu kapatmanız gerekir: Ayarlar → Community Plugins → "Safe mode" kapalı konuma getirin. Bu, topluluk eklentilerine erişim sağlar.
+</Callout>
+
+## İlk çalıştırma
+
+### Obsidian Copilot Kurulumu
+
+1. Obsidian → Ayarlar → Community Plugins → Browse
+2. "Copilot" eklentisini bulun ve kurun
+3. Eklenti ayarlarına gidin: Ayarlar → Copilot
+4. API sağlayıcı seçin (OpenAI veya Anthropic)
+5. API anahtarınızı girin
+6. Komut paleti (`Cmd/Ctrl + P`) → "Copilot: Open Chat"
+
+```markdown
+# Vault'unuzdaki bir notta veya Chat'te soru sorun:
+"Geçen ay yazdığım proje notlarını özetle."
+"Makine öğrenmesi konusundaki notlarımı birleştir."
+"Bu konuyu araştırdığım notlara göre taslak makale yaz."
+```
+
+### MCP ile Claude Code Entegrasyonu
+
+```bash
+# ~/.claude/mcp_config.json dosyasına Obsidian MCP sunucusunu ekle
+```
+
+```json
+{
+  "mcpServers": {
+    "obsidian": {
+      "command": "obsidian-mcp-server",
+      "args": ["--vault-path", "/Users/kullanici/Vault"]
+    }
+  }
+}
+```
+
+```bash
+# Claude Code'da Obsidian vault'una eriş
+claude "Vault'umdaki tüm 'yapay zeka' etiketli notları listele."
+```
+
+## Senaryolar
+
+### 1) Kişisel RAG Sistemi (Retrieval-Augmented Generation)
+
+```python
+# Smart Connections eklentisi yerine Python ile özel RAG
+# (İleri kullanım — eklenti kurmak istemeyenler için)
+
+import anthropic
+from pathlib import Path
+
+def vault_oku(vault_yolu: str, sorgu: str) -> str:
+    """Obsidian vault'unu tara ve alakalı notları bul."""
+    tum_notlar = []
+    for md_dosya in Path(vault_yolu).rglob("*.md"):
+        icerik = md_dosya.read_text(encoding="utf-8")
+        tum_notlar.append({
+            "dosya": md_dosya.name,
+            "icerik": icerik[:2000]  # İlk 2000 karakter
+        })
+
+    # Alakalı notları basit anahtar kelime ile filtrele
+    # (Üretim için embeddings kullanın)
+    alakali = [n for n in tum_notlar if sorgu.lower() in n["icerik"].lower()]
+    return "\n\n---\n\n".join([f"# {n['dosya']}\n{n['icerik']}" for n in alakali[:5]])
+
+client = anthropic.Anthropic()
+baglam = vault_oku("/Users/kullanici/Vault", "agentic AI")
+
+yanit = client.messages.create(
+    model="claude-sonnet-4-5",
+    max_tokens=1024,
+    messages=[{
+        "role": "user",
+        "content": f"Vault'umdaki notlara göre soruyu yanıtla:\n\n{baglam}\n\nSoru: Agentic AI nedir?"
+    }]
+)
+print(yanit.content[0].text)
+```
+
+### 2) n8n ile Otomatik Not Oluşturma
+
+```
+Tetikleyici: n8n Webhook (yeni makale bildirimi)
+    ↓
+HTTP Request: Makaleyi çek
+    ↓
+Anthropic Düğümü: Özet + anahtar kavramlar + Obsidian bağlantıları
+    ↓
+Filesystem Düğümü: Vault klasörüne .md dosyası yaz
+    Dosya adı: YYYY-MM-DD Makale Adı.md
+    İçerik: ## Özet\n...\n## Kavramlar\n...\n## Bağlantılar\n...
+```
+
+### 3) Claude Code ile Vault Bakımı
+
+```bash
+# Claude Code + Obsidian MCP ile vault bakımı
+claude "Vault'umdaki tüm notları tara. 
+6 aydan eski ve hiç bağlantısı olmayan notları listele.
+Her biri için hangi diğer notlarla ilişkilendirilebileceğini öner."
+```
+
+Claude, Obsidian MCP üzerinden vault'u okur, notları analiz eder ve `[[bağlantı]]` önerileriyle yanıt verir.
+
+## Diğer araçlarla
+
+**Claude Code ile (MCP):** Vault'a doğrudan okuma/yazma erişimi. Ajan araştırma yaptıkça bulguları otomatik nota dönüşür. Bkz. [MCP protokolü](/kavramlar/mcp-protokol).
+
+**n8n ile:** Otomasyon tetikleyicilerle yeni içerik vault'a otomatik aktarılır. RSS özetleri, araştırma bulguları, toplantı notları — hepsi otomatik not haline gelir.
+
+**Obsidian Sync ile:** Tüm cihazlarda vault senkronizasyonu. AI üretilen notlar anında telefona da yansır.
+
+**Git ile:** Vault'u Git ile versiyonlamak, AI değişikliklerini geri almayı mümkün kılar. `.gitignore` ile API anahtarlarını dışarıda tutun.
+
+**LangChain/LangGraph ile:** Vault, LangChain'in dosya yükleyicisi (file loader) ile RAG pipeline'ına entegre edilebilir:
+
+```python
+from langchain_community.document_loaders import ObsidianLoader
+loader = ObsidianLoader("/Users/kullanici/Vault")
+belgeler = loader.load()
+```
+
+## Yaygın hatalar ve çözümleri
+
+<details>
+<summary>Copilot eklentisi API bağlantı hatası</summary>
+
+Eklenti ayarlarında API anahtarını tekrar girin. Obsidian'ı yeniden başlatın. Güvenlik duvarı (firewall) veya proxy arkasındaysanız Obsidian'ın outbound bağlantıya izin verilmesi gerekebilir.
+
+</details>
+
+<details>
+<summary>Smart Connections yavaş / dizinleme bitmedi</summary>
+
+İlk kurulumda Smart Connections tüm vault'u dizinler — bu büyük vault'larda uzun sürebilir. Obsidian'ı arka planda bırakın ve tamamlanmasını bekleyin. "Smart Connections: View Stats" ile ilerlemeyi takip edin.
+
+</details>
+
+<details>
+<summary>MCP sunucusu vault'u bulamıyor</summary>
+
+```bash
+# Vault yolunun doğru olduğunu kontrol et
+ls "/Users/kullanici/Vault"
+
+# Obsidian MCP sunucusunu yeniden başlat
+obsidian-mcp-server --vault-path "/Users/kullanici/Vault" --debug
+```
+
+</details>
+
+<details>
+<summary>AI eklentisi notlarımı buluta gönderiyor mu?</summary>
+
+Obsidian vault dosyaları lokaldir. Ancak AI eklentileri, sorgu metnini ve alakalı not içeriklerini OpenAI veya Anthropic API'sine gönderir. Hassas notlarınızı AI bağlamından hariç tutmak için "exclude from AI" etiketlerini destekleyen eklentileri tercih edin.
+
+</details>
+
+## Maliyet / limit
+
+- **Obsidian (uygulama):** Kişisel kullanım ücretsiz. Ticari kullanım için lisans gerekir.
+- **Obsidian Sync:** Aylık ücretle tüm cihaz senkronizasyonu (opsiyonel — Git ile ücretsiz alternatif mümkün).
+- **Obsidian Publish:** Aylık ücretle vault'u web sitesi olarak yayınlama (opsiyonel).
+- **AI eklenti maliyeti:** Copilot ve Text Generator kendi API anahtarınızı kullanır — OpenAI veya Anthropic token ücretleri geçerli.
+- **Smart Connections:** Ücretsiz ve açık kaynak eklenti; yerel veya uzak embeddings modeli kullanır.
+
+<Callout type="info">
+Küçük-orta boyutlu vault'larda (500'den az not) aylık AI maliyeti çoğu kullanıcı için birkaç dolar düzeyinde kalır. Sık RAG sorgusu yapanlar için Anthropic'in Claude Haiku gibi ucuz modelleri tercih edin.
+</Callout>
+
+## Karşılaştırma
+
+[Hangi araç ne zaman?](/karsilastirmalar/hangi-arac-ne-zaman)
+
+## Daha fazla
+
+- [Obsidian resmi sitesi](https://obsidian.md) — Dynalist Inc.
+- [Obsidian Copilot eklentisi](https://github.com/logancyang/obsidian-copilot) — GitHub
+- [Smart Connections eklentisi](https://github.com/brianpetro/obsidian-smart-env) — GitHub
+- [Obsidian MCP sunucusu](https://github.com/calclavia/mcp-obsidian) — GitHub
+- [Text Generator eklentisi](https://github.com/nhaouari/obsidian-textgenerator-plugin) — GitHub
+- [Kişisel bilgi yönetimi (PKM) kavramı](/kavramlar/memory) — Bu sitede
+- [MCP protokolü](/kavramlar/mcp-protokol) — Bu sitede

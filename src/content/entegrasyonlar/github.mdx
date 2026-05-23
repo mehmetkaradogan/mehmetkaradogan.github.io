@@ -1,0 +1,234 @@
+---
+title: "GitHub Entegrasyonu"
+slug: github
+category: entegrasyonlar
+level: orta
+summary: "Agent'larınızı GitHub ile entegre edin. Resmi MCP sunucusu kurulumu, issue yönetimi, PR incelemesi, kod arama ve CI/CD otomasyon senaryoları."
+updated: 2026-05-23
+tags: ["github", "mcp", "kod-yazma", "ci-cd", "issue-yonetimi", "pr"]
+related: ["mcp-sunucu-listesi", "slack", "google-drive"]
+---
+
+## Ne İşe Yarar?
+
+**GitHub**, dünya genelinde en yaygın kullanılan kod barındırma ve iş birliği platformudur. Agent entegrasyonu şu olanakları sunar:
+
+- Issue triage ve etiketleme otomasyonu.
+- Pull request (PR) otomatik kod incelemesi.
+- Repository içinde akıllı kod arama ve analiz.
+- CI/CD tetikleme ve durum izleme.
+- Release notu ve değişiklik günlüğü (changelog) üretimi.
+
+<Callout type="info">
+GitHub için resmi bir MCP sunucusu mevcuttur ve Claude Code ile sorunsuz çalışır. Claude Code zaten GitHub işlemleri için yerleşik desteğe sahiptir.
+</Callout>
+
+---
+
+## Kurulum ve Bağlantı
+
+### Seçenek A — Resmi GitHub MCP Sunucusu (Önerilen)
+
+```bash
+npx @modelcontextprotocol/server-github
+```
+
+GitHub Personal Access Token oluşturun:
+1. GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens.
+2. Gerekli izinler: `Contents`, `Issues`, `Pull requests`, `Metadata` (read).
+
+```json
+{
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "github_pat_XXXXXXXXXXXXXXXXXXXX"
+      }
+    }
+  }
+}
+```
+
+Bu yapılandırmayla Claude Code GitHub repository'lerinize doğrudan erişebilir.
+
+### Seçenek B — PyGithub ile Doğrudan Kullanım
+
+```bash
+pip install PyGithub
+```
+
+```python
+from github import Github
+
+GITHUB_TOKEN = "github_pat_XXXXXXXXXXXXXXXXXXXX"
+g = Github(GITHUB_TOKEN)
+
+repo = g.get_repo("kullanici/repo-adi")
+
+# Issue listele
+open_issues = repo.get_issues(state="open")
+for issue in list(open_issues)[:5]:
+    print(f"#{issue.number}: {issue.title}")
+```
+
+---
+
+## Pratik Senaryolar
+
+### Senaryo 1 — Issue Triage Botu
+
+Yeni açılan issue'ları otomatik sınıflandıran ve etiketleyen agent:
+
+```python
+import anthropic
+from github import Github
+
+client_ai = anthropic.Anthropic()
+g = Github("github_pat_XXXXXXXXXXXXXXXXXXXX")
+repo = g.get_repo("sirketim/uygulamam")
+
+def classify_issue(title: str, body: str) -> dict:
+    response = client_ai.messages.create(
+        model="claude-haiku-4-5",
+        max_tokens=300,
+        messages=[
+            {
+                "role": "user",
+                "content": (
+                    "Aşağıdaki GitHub issue'sunu analiz et ve JSON formatında döndür:\n"
+                    '{"etiket": "bug|feature|docs|question|enhancement", '
+                    '"oncelik": "kritik|yüksek|orta|düşük", '
+                    '"ozet": "tek cümle", '
+                    '"atanacak_takim": "frontend|backend|devops|pm"}\n\n'
+                    f"Başlık: {title}\nAçıklama: {body[:1000]}"
+                ),
+            }
+        ],
+    )
+    import json
+    return json.loads(response.content[0].text)
+
+def triage_new_issues():
+    unlabeled = repo.get_issues(state="open", labels=[])
+
+    for issue in unlabeled:
+        classification = classify_issue(issue.title, issue.body or "")
+
+        # Etiket ekle (etiketi önce oluşturmanız gerekebilir)
+        try:
+            label = repo.get_label(classification["etiket"])
+            issue.add_to_labels(label)
+        except Exception:
+            pass
+
+        # Yorum ekle
+        issue.create_comment(
+            f"**Otomatik Triage**\n\n"
+            f"- Kategori: `{classification['etiket']}`\n"
+            f"- Öncelik: `{classification['oncelik']}`\n"
+            f"- Takim: `{classification['atanacak_takim']}`\n\n"
+            f"Özet: {classification['ozet']}\n\n"
+            f"_Bu yorum otomatik olarak üretildi._"
+        )
+        print(f"Triage edildi: #{issue.number} — {issue.title}")
+
+triage_new_issues()
+```
+
+### Senaryo 2 — Otomatik PR Kod İncelemesi
+
+```python
+def review_pull_request(pr_number: int) -> str:
+    pr = repo.get_pull(pr_number)
+    files = pr.get_files()
+
+    diff_content = []
+    for file in files:
+        if file.filename.endswith((".py", ".ts", ".js", ".go")):
+            diff_content.append(f"### {file.filename}\n```\n{file.patch}\n```")
+
+    if not diff_content:
+        return "İncelenecek kod değişikliği bulunamadı."
+
+    combined_diff = "\n\n".join(diff_content[:5])  # İlk 5 dosya
+
+    response = client_ai.messages.create(
+        model="claude-sonnet-4-5",
+        max_tokens=2000,
+        messages=[
+            {
+                "role": "user",
+                "content": (
+                    "Aşağıdaki PR diff'ini incele. Şunlara dikkat et:\n"
+                    "1. Potansiyel hatalar veya güvenlik açıkları\n"
+                    "2. Performans sorunları\n"
+                    "3. Kod stili ve okunabilirlik\n"
+                    "4. Test eksikliği\n\n"
+                    "Her bulgu için dosya adı ve açıklama ver. "
+                    "Olumlu noktaları da belirt.\n\n"
+                    f"{combined_diff}"
+                ),
+            }
+        ],
+    )
+    review_text = response.content[0].text
+
+    # PR'a yorum olarak ekle
+    pr.create_review(body=review_text, event="COMMENT")
+    return f"PR #{pr_number} incelemesi tamamlandı."
+```
+
+### Senaryo 3 — Release Notu Üretimi
+
+```python
+def generate_release_notes(from_tag: str, to_tag: str = "HEAD") -> str:
+    """İki tag arasındaki commit'leri alır ve release notu üretir."""
+    comparison = repo.compare(from_tag, to_tag)
+    commits = [
+        f"- {c.commit.message.split(chr(10))[0]}"
+        for c in comparison.commits
+    ]
+    commit_list = "\n".join(commits[:50])
+
+    response = client_ai.messages.create(
+        model="claude-sonnet-4-5",
+        max_tokens=1500,
+        messages=[
+            {
+                "role": "user",
+                "content": (
+                    f"Aşağıdaki commit listesini kullanarak {from_tag}'dan bu yana "
+                    "yapılan değişiklikler için profesyonel bir release notu yaz. "
+                    "Yeni özellikler, hata düzeltmeleri ve kırıcı değişiklikler (breaking changes) "
+                    "bölümlerine ayır. Türkçe yaz.\n\n"
+                    f"{commit_list}"
+                ),
+            }
+        ],
+    )
+    return response.content[0].text
+```
+
+---
+
+## Yaygın Sorunlar
+
+| Sorun | Neden | Çözüm |
+|---|---|---|
+| `GithubException: 401` | Token geçersiz veya süresi dolmuş | Yeni PAT oluşturun |
+| `GithubException: 403` | Yetersiz token izni | Fine-grained token'a gerekli izinleri ekleyin |
+| Rate limit (5000 req/saat) | Çok fazla API çağrısı | Sonuçları önbelleğe alın, `time.sleep` ekleyin |
+| PR diff çok büyük | Patch 1MB'ı aşıyor | `file.patch` None gelebilir; kontrol ekleyin |
+| Label bulunamadı | Etiket repo'da yok | `repo.create_label()` ile önce etiketi oluşturun |
+
+---
+
+## İlgili Sayfalar
+
+- [Kod Yazma Senaryosu](/senaryolar/kod-yazma)
+- [Dokumantasyon Senaryosu](/senaryolar/dokumantasyon)
+- [MCP Sunucu Listesi](/entegrasyonlar/mcp-sunucu-listesi)
+- [Claude Code Aracı](/araclar/claude-code)
+- [Slack Entegrasyonu](/entegrasyonlar/slack)

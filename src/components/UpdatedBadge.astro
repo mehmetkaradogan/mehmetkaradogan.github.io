@@ -1,0 +1,37 @@
+---
+// src/components/UpdatedBadge.astro
+// Shows "Güncellendi" badge if updated within 30 days of 2026-05-23.
+
+export interface Props {
+  updated: Date;
+}
+
+const { updated } = Astro.props;
+
+// Reference date as per spec: 2026-05-23
+const REFERENCE_DATE = new Date('2026-05-23');
+const MS_30_DAYS = 30 * 24 * 60 * 60 * 1000;
+const isRecent = REFERENCE_DATE.getTime() - updated.getTime() <= MS_30_DAYS;
+
+const formatted = updated.toLocaleDateString('tr-TR', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+});
+---
+
+<div class="flex items-center gap-2 text-sm" style="color: var(--text-muted);">
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <circle cx="12" cy="12" r="10"/>
+    <path d="M12 6v6l4 2"/>
+  </svg>
+  <span>Son güncelleme: <time datetime={updated.toISOString()}>{formatted}</time></span>
+  {isRecent && (
+    <span
+      class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold"
+      style="background-color: var(--color-primary-100); color: var(--color-primary-700);"
+    >
+      Yeni
+    </span>
+  )}
+</div>

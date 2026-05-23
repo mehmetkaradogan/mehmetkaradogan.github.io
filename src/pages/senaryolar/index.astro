@@ -1,0 +1,47 @@
+---
+// src/pages/senaryolar/index.astro
+
+import BaseLayout from '@layouts/BaseLayout.astro';
+import Card from '@components/Card.astro';
+import Breadcrumb from '@components/Breadcrumb.astro';
+import { getCollection } from 'astro:content';
+
+const entries = await getCollection('senaryolar', (e) => !e.data.draft);
+const sorted = entries.sort((a, b) => a.data.title.localeCompare(b.data.title, 'tr'));
+---
+
+<BaseLayout
+  title="Senaryolar"
+  description="Agentic AI kullanım senaryoları: araştırma, kod yazma, içerik üretimi, otomasyon ve daha fazlası."
+>
+  <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <Breadcrumb crumbs={[{ label: 'Senaryolar' }]} />
+
+    <header class="mb-8">
+      <h1 class="text-3xl font-bold" style="color: var(--text-primary);">Senaryolar</h1>
+      <p class="mt-2 text-base" style="color: var(--text-secondary);">
+        Gerçek hayat kullanım senaryoları: araştırma, kod yazma, içerik üretimi, otomasyon ve daha fazlası.
+      </p>
+    </header>
+
+    {sorted.length > 0 ? (
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {sorted.map((entry) => (
+          <Card
+            title={entry.data.title}
+            summary={entry.data.summary}
+            href={`/senaryolar/${entry.slug}`}
+            level={entry.data.level}
+            tags={entry.data.tags}
+            updated={entry.data.updated}
+          />
+        ))}
+      </div>
+    ) : (
+      <div class="rounded-xl border p-12 text-center" style="border-color: var(--border-color); background-color: var(--bg-surface);">
+        <p class="text-lg font-semibold" style="color: var(--text-primary);">Yakında</p>
+        <p class="mt-2 text-sm" style="color: var(--text-secondary);">Senaryo sayfaları hazırlanıyor.</p>
+      </div>
+    )}
+  </div>
+</BaseLayout>
