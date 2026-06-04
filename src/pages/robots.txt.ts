@@ -2,7 +2,7 @@
 import type { APIRoute } from 'astro';
 
 export const GET: APIRoute = ({ site }) => {
-  const siteUrl = site?.href ?? 'https://agenticai.tr';
+  const siteUrl = site?.href ?? 'https://mehmetkaradogan.github.io';
   // Ensure trailing slash removed for the sitemap line
   const base = siteUrl.endsWith('/') ? siteUrl.slice(0, -1) : siteUrl;
 
