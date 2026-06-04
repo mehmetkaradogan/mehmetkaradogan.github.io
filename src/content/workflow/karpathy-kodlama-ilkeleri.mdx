@@ -1,0 +1,167 @@
+---
+title: "Karpathy'nin AI Kodlama İlkeleri"
+slug: karpathy-kodlama-ilkeleri
+category: workflow
+level: orta
+summary: "Andrej Karpathy'nin LLM kodlama tuzakları üzerine gözlemlerinden doğan 4 davranışsal ilke: Önce Düşün, Önce Sadelik, Cerrahi Değişiklik ve Hedef Güdümlü Yürütme — Claude Code ve Cursor için somut örneklerle."
+updated: 2026-06-04
+tags: [karpathy, claude-code, cursor, claude-md, kodlama-ilkeleri, sadelik, hedef-gudumlu, en-iyi-pratikler]
+related: [claude-code-en-iyi-pratikler, anti-patternler, desenler]
+---
+
+import Callout from '@components/mdx/Callout.astro';
+
+## Bu Rehber Hakkında
+
+Bu sayfa, [multica-ai/andrej-karpathy-skills](https://github.com/multica-ai/andrej-karpathy-skills)
+deposunun Türkçeye uyarlanmış özetidir. Depo, [Andrej Karpathy'nin](https://x.com/karpathy/status/2015883857489522876)
+LLM'lerle kodlama üzerine gözlemlerinden doğan, tek bir `CLAUDE.md` dosyasına sığan
+**davranışsal kodlama kurallarından** oluşur. Bu kurallar Claude Code'a (ve Cursor'a)
+yüklendiğinde, modelin en sık yaptığı kodlama hatalarını azaltmayı hedefler.
+
+Karpathy'nin teşhisi net: modeller **"sizin adınıza yanlış varsayımlar yapıp,
+kontrol etmeden bunlarla yollarına devam eder"** ve kodu gereksiz yere
+karmaşıklaştırma eğilimindedir — **"100 satırın yeteceği yere 1000 satırlık şişkin
+bir yapı"** kurarlar.
+
+<Callout type="not" title="Denge (tradeoff)">
+Bu kurallar **hızdan çok dikkatten** yana eğilim gösterir. Önemsiz, küçük görevlerde
+kuralları körü körüne uygulamak yerine sağduyunuzu kullanın.
+</Callout>
+
+---
+
+## Dört Temel İlke
+
+### 1. Önce Düşün (Think Before Coding)
+
+> **Varsayma. Kafa karışıklığını gizleme. Tradeoff'ları yüzeye çıkar.**
+
+Uygulamaya başlamadan önce:
+
+- **Varsayımlarını açıkça belirt.** Emin değilsen, sor.
+- **Birden çok yorum mümkünse, hepsini sun** — sessizce birini seçme.
+- **Daha basit bir yol varsa, söyle.** Gerektiğinde geri itele (push back).
+- **Bir şey belirsizse, dur.** Neyin kafanı karıştırdığını adlandır. Sor.
+
+<Callout type="ipucu" title="Örnek: «Kullanıcı verisini dışa aktar»">
+Bu istek belirsizliklerle dolu: **Hangi kullanıcılar?** (hepsi mi, filtreli mi)
+**Hangi format?** (dosya, API, e-posta) **Hangi alanlar?** (hassas alanlar dahil mi)
+Doğru davranış: uygulamadan önce bu netleştirme sorularını sormaktır.
+</Callout>
+
+### 2. Önce Sadelik (Simplicity First)
+
+> **Problemi çözen minimum kod. Spekülatif hiçbir şey yok.**
+
+- İstenenin ötesinde **özellik yok.**
+- Tek kullanımlık kod için **soyutlama (abstraction) yok.**
+- İstenmemiş **"esneklik" veya "yapılandırılabilirlik" yok.**
+- İmkânsız senaryolar için **hata yönetimi yok.**
+- 200 satır yazdıysan ve 50 satırla olabilecekse, **yeniden yaz.**
+
+Kendine sor: *"Kıdemli bir mühendis buna 'aşırı karmaşık' der mi?"* Cevap evetse, sadeleştir.
+
+<Callout type="uyari" title="Örnek: İndirim hesabı">
+Basit bir indirim hesabı için en baştan soyut base class'lar ve strategy pattern'a
+**gerek yoktur** — düz bir fonksiyon yeter. Karmaşıklığı yalnızca gereksinim
+*gerçekten talep ettiğinde* ekleyin, spekülatif olarak değil.
+</Callout>
+
+### 3. Cerrahi Değişiklik (Surgical Changes)
+
+> **Yalnızca zorunlu olana dokun. Sadece kendi yarattığın dağınıklığı topla.**
+
+Mevcut kodu düzenlerken:
+
+- Komşu kodu, yorumları veya formatı **"iyileştirme".**
+- Bozuk olmayan şeyleri **refactor etme.**
+- Farklı yapardın bile olsa, **mevcut stile uy.**
+- Alakasız ölü kod (dead code) fark edersen, **silme — sadece belirt.**
+
+Değişikliklerin yetim (orphan) bıraktığında:
+
+- **Senin** değişikliklerinin kullanılmaz hâle getirdiği import/değişken/fonksiyonları kaldır.
+- İstenmediği sürece **önceden var olan ölü kodu kaldırma.**
+
+Test şudur: *Değişen her satır, doğrudan kullanıcının isteğine izlenebilmeli.*
+
+<Callout type="uyari" title="Örnek: Boş e-posta doğrulayıcı hatası">
+Boş bir e-posta validator hatasını düzeltirken; aynı anda **kullanıcı adı doğrulaması
+eklemeyin**, kodu yeniden formatlamayın, type hint serpiştirmeyin. Yalnızca düzeltme
+için gerekli satırlara dokunun, mevcut stili koruyun.
+</Callout>
+
+### 4. Hedef Güdümlü Yürütme (Goal-Driven Execution)
+
+> **Başarı kriterlerini tanımla. Doğrulanana kadar döngüye gir.**
+
+Görevleri **doğrulanabilir hedeflere** dönüştürün:
+
+| Belirsiz görev | Doğrulanabilir hedef |
+|---|---|
+| "Doğrulama ekle" | "Geçersiz girdiler için test yaz, sonra geçir" |
+| "Hatayı düzelt" | "Hatayı yeniden üreten bir test yaz, sonra geçir" |
+| "X'i refactor et" | "Öncesinde ve sonrasında testlerin geçtiğinden emin ol" |
+
+Çok adımlı görevlerde kısa bir plan belirtin:
+
+```
+1. [Adım] → doğrula: [kontrol]
+2. [Adım] → doğrula: [kontrol]
+3. [Adım] → doğrula: [kontrol]
+```
+
+Güçlü başarı kriterleri, modelin **bağımsız olarak döngüye girmesini** sağlar.
+Zayıf kriterler ("çalışır hâle getir") sürekli netleştirme gerektirir.
+
+<Callout type="info" title="Karpathy'nin temel iç görüsü">
+*"LLM'ler belirli hedeflere ulaşana kadar döngüye girmekte olağanüstü iyidir...
+Ona ne yapacağını söyleme; başarı kriterlerini ver ve gitmesini izle."*
+Bu yüzden zorunlu (imperative) talimatları, doğrulama döngülü bildirimsel
+(declarative) hedeflere çevirmek bu kadar güçlüdür.
+</Callout>
+
+---
+
+## Kurulum
+
+Bu kuralları kendi projenize üç şekilde uygulayabilirsiniz:
+
+1. **Claude Code eklentisi (plugin):** Marketplace'i ekleyip eklentiyi kurun
+   (`/plugin marketplace add ...` ardından plugin yükleme komutu).
+2. **Proje bazında dosya:** `CLAUDE.md` dosyasını proje köküne indirin veya mevcut
+   `CLAUDE.md`'nize ekleyin.
+3. **Cursor desteği:** Depodaki `.cursor/rules/karpathy-guidelines.mdc` dosyasını kullanın.
+
+<Callout type="ipucu">
+Bu ilkeleri kendi proje kurallarınızla **birleştirin** — üzerine yazmayın. Sitedeki
+[Claude Code En İyi Pratikler](/workflow/claude-code-en-iyi-pratikler) sayfasındaki
+"CLAUDE.md 200 satırın altında olsun" tavsiyesini unutmayın; bu dört ilke tek başına
+oldukça kısadır ve mevcut kurallarınızın üzerine zarif biçimde oturur.
+</Callout>
+
+---
+
+## Bu İlkeler İşe Yarıyorsa...
+
+Kuralların etkili olduğunu şu sinyallerden anlarsınız:
+
+- **Diff'lerde gereksiz değişiklik azalır** — yalnızca isteğe izlenebilen satırlar değişir.
+- **Aşırı karmaşıklık nedeniyle yapılan yeniden yazımlar (rewrite) azalır.**
+- **Netleştirme soruları, hatalardan sonra değil, uygulamadan önce gelir.**
+
+Merkezî fikir tek cümlede: ***İyi kod, yarının problemini erkenden değil, bugünün
+problemini sade biçimde çözer.*** Görünüşte sofistike pattern'lar çoğu zaman gereksiz
+karmaşıklık getirir; kodu anlamayı, test etmeyi ve sürdürmeyi zorlaştırır — tanınmış
+"best practice"leri takip ediyor olsalar bile.
+
+---
+
+## Kaynaklar
+
+- [multica-ai/andrej-karpathy-skills](https://github.com/multica-ai/andrej-karpathy-skills) — Bu rehberin kaynağı (GitHub)
+- [Andrej Karpathy'nin orijinal gözlemi](https://x.com/karpathy/status/2015883857489522876) — X (Twitter)
+- [Claude Code En İyi Pratikler](/workflow/claude-code-en-iyi-pratikler) — 83 ipucu ve iş akışları
+- [Anti-Pattern'ler](/workflow/anti-patternler) — Kaçınılması gereken hatalar
+- [Claude Code (araç sayfası)](/araclar/claude-code) — Bu sitede
