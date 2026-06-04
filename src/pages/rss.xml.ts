@@ -32,7 +32,7 @@ export async function GET(context: APIContext) {
     title: 'Agentic AI Öğrenme Merkezi — Haberler',
     description:
       'Türkçe Agentic AI öğrenme merkezi: en güncel haberler, araç güncellemeleri ve araştırmalar.',
-    site: context.site ?? 'https://agenticai.tr',
+    site: context.site ?? 'https://mehmetkaradogan.github.io',
     items,
     customData: `<language>tr</language>`,
     stylesheet: false,
