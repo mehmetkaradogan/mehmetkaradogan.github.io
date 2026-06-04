@@ -99,6 +99,7 @@ export const nav: NavSection[] = [
       { label: 'Örnekler', href: '/workflow/ornekler' },
       { label: 'Anti-Pattern\'ler', href: '/workflow/anti-patternler' },
       { label: 'Claude Code En İyi Pratikler', href: '/workflow/claude-code-en-iyi-pratikler' },
+      { label: 'Karpathy Kodlama İlkeleri', href: '/workflow/karpathy-kodlama-ilkeleri' },
     ],
   },
   {
