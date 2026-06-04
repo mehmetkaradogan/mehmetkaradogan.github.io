@@ -1,0 +1,215 @@
+---
+title: "Claude Code ile Projeler"
+slug: claude-code-projeleri
+category: projeler
+seviye: orta
+level: orta
+summary: "Anthropic Claude Code'un terminal tabanlı agentic kodlama gücünü kullanan beş uygulamalı proje: test kapsamı artırma, legacy kod belgeleme, CI'da otomatik inceleme, MCP ile migration asistanı ve git worktree'lerle çok-ajanlı refactoring."
+updated: 2026-06-04
+tags: [proje, claude-code, anthropic, subagent, mcp, hooks, ci-cd]
+related: [claude-code, claude-code-en-iyi-pratikler, gemini-claude-code-birlikte]
+---
+
+## Neden Claude Code'a Özel Projeler?
+
+[Claude Code](/araclar/claude-code), tüm kod tabanını bağlam penceresine alıp dosya
+okuyabilen, terminal komutu çalıştırabilen, test koşabilen ve commit atabilen **terminal
+tabanlı agentic** bir araçtır. Öne çıktığı yer: çok dosyalı, doğrulama döngülü, uzun-soluklu
+mühendislik görevleri. Bu sayfadaki projeler tam da bu yetenekleri — **subagent'lar, hook'lar,
+MCP sunucuları ve git worktree'leri** — merkeze alır.
+
+<Callout type="ipucu">
+Başlamadan önce [Claude Code En İyi Pratikler](/workflow/claude-code-en-iyi-pratikler)
+sayfasındaki bağlam yönetimi ve hedef güdümlü yürütme ilkelerini okuyun; bu projelerin
+hepsi "ona ne yapacağını değil, başarı kriterini söyle" mantığına dayanır.
+</Callout>
+
+---
+
+## Proje 1 — Otomatik Test Kapsamı Artırıcı (Subagent + Hook)
+
+**Amaç:** Bir kod tabanındaki test kapsamını (coverage) hedef bir orana çıkaran; eksik test
+edilen fonksiyonları bulup test yazan ve `PostToolUse` hook'u ile her yazımdan sonra otomatik
+format/lint çalıştıran bir Claude Code akışı.
+
+**Kullanılan Araçlar:**
+- [Claude Code](/araclar/claude-code) — subagent + hooks
+- `pytest-cov` / `jest --coverage`
+- `.claude/hooks/` — PostToolUse formatlama
+
+**Adımlar:**
+
+1. Bir `coverage-artir` slash komutu (`.claude/commands/`) tanımla: hedef = "kapsam ≥ %80".
+2. Bir "test-yazar" subagent oluştur (`.claude/agents/`), modeli Sonnet'e sabitle.
+3. Ajan eksik kapsamlı fonksiyonları tespit etsin, kenar durumlar dahil test yazsın.
+4. `PostToolUse` hook'u ile her dosya yazımından sonra `ruff format` / `prettier` koştur.
+5. Hedef kapsama ulaşana kadar döngüye gir; sonucu raporla.
+
+**Zorluk:** Orta
+
+**Genişletme Fikirleri:**
+- Kapsam düşerse uyaran bir `Stop` hook'u ekle.
+- Üretilen testleri ayrı bir PR'a topla.
+- Mutasyon testi (mutation testing) ile test kalitesini ölç.
+
+**Örnek yapılandırma:**
+
+```markdown
+<!-- .claude/commands/coverage-artir.md -->
+---
+description: Test kapsamını hedef orana çıkar
+argument-hint: "[hedef yüzde, varsayılan 80]"
+---
+Hedef kapsam: ${1:-80}%
+
+1. `pytest --cov` çalıştır → mevcut kapsamı ölç
+2. Kapsamı en düşük 3 modülü belirle
+3. test-yazar subagent'ını kullanarak kenar durumlar dahil test yaz
+4. Tekrar ölç → hedefe ulaşılana kadar 1-3'ü tekrarla
+5. Özet tablo üret: modül | önce | sonra
+```
+
+---
+
+## Proje 2 — Legacy Kod Tabanı Belgeleme Ajanı
+
+**Amaç:** Belgesi olmayan büyük/eski bir depoyu Claude Code'un **1M token bağlamına** alıp;
+mimari genel bakış, modül-modül açıklama, veri akışı diyagramları (Mermaid) ve bir
+`ARCHITECTURE.md` üreten ajan.
+
+**Kullanılan Araçlar:**
+- [Claude Code](/araclar/claude-code) — büyük bağlam, çok dosyalı okuma
+- `.claudeignore` — gereksiz dizinleri hariç tut
+- Mermaid (diyagramlar)
+
+**Adımlar:**
+
+1. `.claudeignore` ile `node_modules`, `dist`, `vendor` gibi dizinleri dışla.
+2. Claude Code'a "tüm kod tabanını tara ve mimariyi çıkar" görevini ver.
+3. Modül bağımlılıklarını Mermaid diyagramı olarak ürettir.
+4. Her ana modül için bir bölüm yazdır (sorumluluk, giriş/çıkış, dış bağımlılıklar).
+5. `ARCHITECTURE.md` + her klasöre kısa `README` üret.
+
+**Zorluk:** Orta
+
+**Genişletme Fikirleri:**
+- "Riskli/ölü kod" raporu ekle (ama silme — [cerrahi değişiklik](/workflow/karpathy-kodlama-ilkeleri) ilkesi).
+- Üretilen dokümanı CI'da güncel tut.
+- Onboarding için adım adım "ilk katkı" rehberi ürettir.
+
+---
+
+## Proje 3 — CI/CD'de Otomatik PR İnceleme Botu
+
+**Amaç:** Her pull request'te güvenlik açıkları, regresyon ve stil sorunlarını arayan; bulguları
+PR özetine yazan headless bir Claude Code akışı. [Claude Code En İyi Pratikler](/workflow/claude-code-en-iyi-pratikler)'teki
+`/code-review` desenini CI'ya taşır.
+
+**Kullanılan Araçlar:**
+- [Claude Code](/araclar/claude-code) — `--print` headless mod
+- [GitHub Actions](/entegrasyonlar/github)
+
+**Adımlar:**
+
+1. Bir GitHub Actions workflow'u kur (`on: pull_request`).
+2. Claude Code'u headless modda çalıştır: değişen diff'i incele.
+3. Güvenlik + regresyon + stil için ayrı kontrol başlıkları iste.
+4. Çıktıyı `$GITHUB_STEP_SUMMARY`'e veya PR yorumuna yaz.
+5. Kritik bulgu varsa workflow'u başarısız (fail) yap.
+
+**Zorluk:** Orta
+
+**Genişletme Fikirleri:**
+- İnceleme modelini Sonnet'e sabitleyerek maliyeti düşür.
+- Yalnızca değişen dosyalara odaklan (`git diff --name-only`).
+- Tekrarlayan bulguları otomatik lint kuralına dönüştür.
+
+**Örnek workflow:**
+
+```yaml
+# .github/workflows/claude-review.yml
+name: Claude Code Review
+on: pull_request
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+      - name: Review diff
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          git diff origin/${{ github.base_ref }}...HEAD > changes.diff
+          claude --print "changes.diff dosyasındaki değişiklikleri incele: \
+          güvenlik açıkları, regresyon riski ve stil sorunları. Markdown tablo üret." \
+          >> "$GITHUB_STEP_SUMMARY"
+```
+
+---
+
+## Proje 4 — MCP Sunucusuyla Veritabanı Migration Asistanı
+
+**Amaç:** Bir Postgres veritabanına [MCP](/kavramlar/mcp-protokol) üzerinden bağlanıp şemayı
+okuyan, güvenli migration betikleri üreten ve **uygulamadan önce insan onayı** isteyen bir
+Claude Code asistanı.
+
+**Kullanılan Araçlar:**
+- [Claude Code](/araclar/claude-code) + Postgres MCP sunucusu
+- [MCP Protokolü](/kavramlar/mcp-protokol)
+
+**Adımlar:**
+
+1. `~/.claude` altında Postgres MCP sunucusunu yapılandır (salt-okunur kullanıcıyla başla).
+2. Claude'a "şemayı incele, eksik index'leri ve normalizasyon sorunlarını bul" dedirt.
+3. Migration betiklerini (up/down) ürettir.
+4. Yıkıcı komutları engelleyen bir `/careful` hook'u ekle; uygulamayı onaya bağla.
+5. Geri alma (rollback) planını da ürettir.
+
+**Zorluk:** İleri
+
+**Genişletme Fikirleri:**
+- Staging'de otomatik dene, prod'da insan onayı zorunlu.
+- Şema değişiklik geçmişini belgeye işle.
+- Performans etkisini (EXPLAIN) analiz ettir.
+
+<Callout type="uyari">
+Üretim veritabanına yazma erişimi veren MCP sunucularını dikkatle yapılandırın. Önce
+salt-okunur bağlanın; yazma işlemlerini [human-in-the-loop](/kavramlar/human-in-the-loop)
+onayı arkasına alın.
+</Callout>
+
+---
+
+## Proje 5 — Git Worktree'lerle Çok-Ajanlı Refactoring Takımı
+
+**Amaç:** Büyük bir refactoring'i paralel çalışan birden çok Claude Code örneğine bölmek:
+her ajan kendi **git worktree**'sinde ayrı bir modülü dönüştürür, bir "entegratör" ajan
+sonuçları birleştirir.
+
+**Kullanılan Araçlar:**
+- [Claude Code](/araclar/claude-code) — agent teams + `isolation: "worktree"`
+- `tmux` — paralel oturum yönetimi
+- git worktree
+
+**Adımlar:**
+
+1. Refactoring'i bağımsız modüllere böl (örn. her servis ayrı).
+2. Her modül için bir worktree + bir Claude Code örneği başlat (tmux panelleri).
+3. Her ajana net başarı kriteri ver: "testler önce ve sonra geçmeli".
+4. Bir entegratör ajan dalları sırayla merge etsin, çakışmaları çözsün.
+5. Tüm test paketini son kez koştur; tek PR olarak topla.
+
+**Zorluk:** İleri
+
+**Genişletme Fikirleri:**
+- Worker'lara Sonnet, entegratöre Opus ata ([multi-model](/workflow/multi-model-stratejileri)).
+- Bir ajan kod yazarken diğeri bağımsız doğrulasın (test-time compute).
+- İlerlemeyi tek bir durum panosunda topla.
+
+---
+
+**Sıradaki:** İki modeli aynı projede birlikte kullanmak için
+[Gemini + Claude Code Birlikte](/projeler/gemini-claude-code-birlikte) sayfasına geç.

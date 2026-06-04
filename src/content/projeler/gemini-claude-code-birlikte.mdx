@@ -1,0 +1,198 @@
+---
+title: "Gemini + Claude Code Birlikte"
+slug: gemini-claude-code-birlikte
+category: projeler
+seviye: ileri
+level: ileri
+summary: "İki modeli aynı boru hattında birleştiren beş çapraz-model (cross-model) proje: tasarımdan koda, bağımsız QA döngüsü, çok-modlu dokümantasyon, dev veri analizinden PR'a ve MCP üzerinden Gemini'yi Claude Code'a araç olarak bağlama."
+updated: 2026-06-04
+tags: [proje, gemini, claude-code, cross-model, multi-model, mcp, orkestrasyon]
+related: [gemini-projeleri, claude-code-projeleri, multi-model-stratejileri]
+---
+
+## Neden İki Modeli Birlikte Kullanalım?
+
+Tek bir model her işte en iyi değildir. **Gemini** çok-modlu algı (görüntü, video, ses) ve
+çok uzun bağlamda üstündür; **Claude Code** ise terminal tabanlı, çok dosyalı, doğrulama
+döngülü kod mühendisliğinde güçlüdür. Bu sayfadaki projeler ikisini bir **çapraz-model boru
+hattında** birleştirir: genelde *Gemini algılar/analiz eder → Claude Code uygular/doğrular*.
+
+<Callout type="not">
+Bu desenlerin teorisi için [Multi-Model Stratejileri](/workflow/multi-model-stratejileri)
+ve [Claude Code En İyi Pratikler](/workflow/claude-code-en-iyi-pratikler)'teki çapraz-model
+iş akışları bölümüne bakın. İki modeli bağlamanın üç yolu vardır: ayrı çağrılar (boru hattı),
+[MCP](/kavramlar/mcp-protokol) ile araç olarak çağırma, veya router yaklaşımı.
+</Callout>
+
+---
+
+## Proje 1 — Tasarım → Kod Boru Hattı (Mockup'tan Uygulamaya)
+
+**Amaç:** Bir UI ekran görüntüsü veya Figma mockup'ını **Gemini Vision** ile yapılandırılmış
+bir bileşen spesifikasyonuna çevirip, bu spec'i **Claude Code**'a verip çalışan frontend
+kodu ürettirmek.
+
+**Kullanılan Araçlar:**
+- [Gemini](/projeler/gemini-projeleri) — görüntü → yapılandırılmış spec (JSON)
+- [Claude Code](/araclar/claude-code) — spec → bileşen kodu + testler
+
+**Adımlar:**
+
+1. Gemini'ye mockup görüntüsünü ver: bileşen ağacı, renk paleti, boşluk/grid'i JSON çıkar.
+2. JSON spec'i bir `spec.json` dosyasına yaz.
+3. Claude Code'a "bu spec'e göre React + Tailwind bileşenlerini üret, görsel olarak doğrula" görevini ver.
+4. Claude Code [hedef güdümlü](/workflow/karpathy-kodlama-ilkeleri) çalışsın: "spec'teki her bileşen render olmalı".
+5. Sonucu Gemini'ye tekrar gösterip mockup'a sadakat skoru iste (kapanış döngüsü).
+
+**Zorluk:** İleri
+
+**Genişletme Fikirleri:**
+- Erişilebilirlik (a11y) kontrollerini ekle.
+- Birden çok ekranı tek akışta işle.
+- Tasarım sistemine (design tokens) bağla.
+
+**Boru hattı iskeleti:**
+
+```python
+from google import genai
+import subprocess, json, os
+
+gem = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+
+# 1) Gemini: mockup → spec
+img = gem.files.upload(file="mockup.png")
+spec = gem.models.generate_content(
+    model="gemini-2.5-pro",
+    contents=[img, "Bu arayüzü bileşen ağacı, renkler ve grid olarak JSON çıkar."],
+    config={"response_mime_type": "application/json"},
+).text
+open("spec.json", "w", encoding="utf-8").write(spec)
+
+# 2) Claude Code: spec → kod (headless)
+subprocess.run([
+    "claude", "--print",
+    "spec.json dosyasındaki tasarıma göre React + Tailwind bileşenlerini üret. "
+    "Her bileşenin render olduğunu doğrulayan testler yaz ve geçir."
+], check=True)
+```
+
+---
+
+## Proje 2 — Gemini QA + Claude Code Geliştirme Döngüsü
+
+**Amaç:** Claude Code özelliği geliştirirken, **bağımsız bir Gemini ajanını "kıdemli
+gözden geçiren"** rolünde çalıştırmak. İki farklı model ailesi olduğu için gerçek perspektif
+çeşitliliği sağlanır ([group-chat/debate](/workflow/desenler) deseninin çapraz-model hâli).
+
+**Kullanılan Araçlar:**
+- [Claude Code](/araclar/claude-code) — uygulama
+- [Gemini](/projeler/gemini-projeleri) — bağımsız inceleme/QA
+
+**Adımlar:**
+
+1. Claude Code bir özelliği uygulasın ve diff üretsin.
+2. Diff'i Gemini'ye ver: "regresyon, kenar durum ve güvenlik açısından eleştir".
+3. Gemini'nin bulgularını Claude Code'a geri besle.
+4. Claude Code geçerli bulguları düzeltsin (geçersizleri gerekçeyle reddetsin).
+5. İki tur sonra fark kapanmıyorsa insana yükselt.
+
+**Zorluk:** İleri
+
+**Genişletme Fikirleri:**
+- Rolleri tersine çevir (Gemini yazar, Claude inceler) ve sonuçları kıyasla.
+- Bulguları otomatik issue'ya dönüştür.
+- "Onaylanan/Reddedilen bulgu" istatistiği tut.
+
+---
+
+## Proje 3 — Çok-Modlu Dokümantasyon Üreticisi
+
+**Amaç:** Ürün demolarının **videolarını** ve mimari **diyagram görsellerini** Gemini ile
+"okuyup", bu kavrayışı Claude Code'a verip depo içinde tutarlı, kod-bağlantılı Markdown
+dokümantasyonu ürettirmek.
+
+**Kullanılan Araçlar:**
+- [Gemini](/projeler/gemini-projeleri) — video/görsel → metin kavrayış
+- [Claude Code](/araclar/claude-code) — kod tabanıyla hizalı doküman üretimi
+
+**Adımlar:**
+
+1. Gemini demo videosunu işleyip "kullanıcı akışları" metnini çıkarsın.
+2. Gemini mimari diyagram görselini bileşen ilişkilerine çevirsin.
+3. Bu çıktıları Claude Code'a ver; ilgili kod dosyalarıyla eşleştirsin.
+4. Claude Code kod örnekleri ve dosya bağlantıları içeren `docs/` üretsin.
+5. Doküman ile kod arasındaki tutarlılığı Claude Code doğrulasın (kırık link/yanlış API yok).
+
+**Zorluk:** İleri
+
+**Genişletme Fikirleri:**
+- Videodan otomatik GIF/ekran görüntüsü çıkar.
+- Dokümanı her sürümde güncel tutan CI ekle.
+- Çok dilli doküman üret.
+
+---
+
+## Proje 4 — Dev Veri/Log Analizinden Otomatik Düzeltme PR'ına
+
+**Amaç:** Gigabaytlarca log veya çok büyük bir veri dökümünü **Gemini'nin 1M+ bağlamıyla**
+analiz edip kök neden hipotezi üretmek; ardından **Claude Code**'a kod tabanında düzeltmeyi
+uygulatıp test eden bir PR ürettirmek.
+
+**Kullanılan Araçlar:**
+- [Gemini](/projeler/gemini-projeleri) — dev bağlamda log/hata analizi
+- [Claude Code](/araclar/claude-code) — kök nedeni kodda düzeltme + PR
+
+**Adımlar:**
+
+1. Üretim loglarını/stack trace'leri Gemini'ye ver: tekrarlayan hata örüntülerini bul.
+2. Gemini en olası kök neden + ilgili dosya/fonksiyon hipotezini üretsin.
+3. Hipotezi Claude Code'a aktar: "hatayı yeniden üreten test yaz, sonra düzelt".
+4. Claude Code [hedef güdümlü](/workflow/karpathy-kodlama-ilkeleri) döngüyle testi geçirsin.
+5. Düzeltmeyi açıklayan bir PR ve regresyon testini birlikte üret.
+
+**Zorluk:** İleri
+
+**Genişletme Fikirleri:**
+- Gemini'nin hipotezine güven skoru ekle; düşükse insana sor.
+- Birden çok hipotezi paralel Claude Code worktree'lerinde dene.
+- Çözülen hata örüntüsünü alert kuralına dönüştür.
+
+---
+
+## Proje 5 — MCP ile Gemini'yi Claude Code'a Araç Olarak Bağlama
+
+**Amaç:** Bir [MCP](/kavramlar/mcp-protokol) sunucusu yazarak Gemini'yi Claude Code'un içinden
+çağrılabilir bir **araç** hâline getirmek. Böylece Claude Code, çok-modlu bir alt görevi
+(görüntü/video analizi) gerektiğinde Gemini'ye devreder — gerçek bir [router/orkestrasyon](/workflow/desenler)
+deseni.
+
+**Kullanılan Araçlar:**
+- MCP Python/TypeScript SDK — özel sunucu
+- `google-genai` — sunucu içinde Gemini çağrısı
+- [Claude Code](/araclar/claude-code) — MCP istemcisi
+
+**Adımlar:**
+
+1. `gemini_analiz` adında bir MCP aracı sun (girdi: görüntü/video yolu + soru).
+2. Araç içinde Gemini multimodal çağrısını yap, metin sonucu döndür.
+3. Sunucuyu Claude Code'un MCP yapılandırmasına ekle.
+4. Claude Code'a "ekran görüntüsünü gemini_analiz ile incele, sonra kodu güncelle" dedirt.
+5. Claude'un ne zaman Gemini'ye devrettiğini gözlemleyip yönlendir.
+
+**Zorluk:** İleri
+
+**Genişletme Fikirleri:**
+- Birden çok modeli (DeepSeek, yerel Ollama) aynı sunucuda araç olarak sun.
+- Maliyet/gecikmeye göre model seçen bir yönlendirme katmanı ekle.
+- Araç çağrılarını ve seçim gerekçelerini logla.
+
+<Callout type="ipucu">
+Bu proje, sitedeki [MCP Sunucu Yazma modülü](/modul/06-mcp-sunucu-yazma) ile mükemmel
+uyum sağlar — oradaki sunucu iskeletini Gemini çağrısıyla genişletmek 1-2 saat sürer.
+</Callout>
+
+---
+
+**Tebrikler!** Bu üç proje sayfasıyla 15 yeni örnek projeyi tamamladın. Daha fazla fikir
+için [Fikir Bankası](/projeler/fikir-bankasi)'na, teorik temel için
+[Workflow Desenleri](/workflow/desenler)'ne göz at.

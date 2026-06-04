@@ -1,0 +1,239 @@
+---
+title: "Gemini ile Projeler"
+slug: gemini-projeleri
+category: projeler
+seviye: orta
+level: orta
+summary: "Google Gemini'nin çok-modlu (multimodal) ve uzun bağlam güçlü yanlarını kullanan beş uygulamalı proje: görüntüden veri çıkarma, video özetleme, Antigravity ile full-stack build, Google Search ile temellendirilmiş destek botu ve Live API sesli asistan."
+updated: 2026-06-04
+tags: [proje, gemini, google, multimodal, vision, antigravity, function-calling]
+related: [google-antigravity, claude-code-projeleri, gemini-claude-code-birlikte]
+---
+
+## Neden Gemini'ye Özel Projeler?
+
+Google Gemini'nin öne çıktığı alanlar **çok-modluluk** (metin + görüntü + ses + video tek istekte),
+**çok uzun bağlam penceresi** (1M+ token) ve **Google Search ile temellendirme (grounding)**
+yetenekleridir. Bu sayfadaki beş proje, tam da bu güçlü yanları merkeze alır. Hepsi
+[Google AI Studio](https://aistudio.google.com) üzerinden ücretsiz bir API anahtarıyla
+başlatılabilir; kod örnekleri yeni `google-genai` Python SDK'sını kullanır.
+
+<Callout type="not">
+Kurulum: `pip install google-genai` ve `export GEMINI_API_KEY="..."`. Görsel/IDE tabanlı
+projeler için [Google Antigravity](/araclar/google-antigravity) aracını kullanacağız.
+</Callout>
+
+---
+
+## Proje 1 — Fatura/Fiş Görüntüsünden Yapılandırılmış Veri Çıkarma
+
+**Amaç:** Bir fatura veya fiş fotoğrafını doğrudan Gemini'ye verip; satıcı, tarih, toplam
+tutar, KDV ve kalemleri **yapılandırılmış JSON** olarak çıkaran bir ajan. OCR + ayrıştırma
+adımlarını tek çok-modlu çağrıya indirir.
+
+**Kullanılan Araçlar:**
+- `google-genai` — Gemini 2.x multimodal çağrıları
+- `Pillow` — görüntü ön işleme (isteğe bağlı)
+- Pydantic — çıktı şeması doğrulama
+
+**Adımlar:**
+
+1. Fiş/fatura görüntüsünü oku ve isteğe bağlı olarak yeniden boyutlandır.
+2. Gemini'ye görüntü + "şu JSON şemasına göre alanları çıkar" yönergesini ver.
+3. `response_schema` ile yapılandırılmış çıktı zorla (structured output).
+4. Pydantic ile doğrula; eksik alanları işaretle.
+5. Sonuçları CSV/veritabanına yaz; toplu klasör işleme ekle.
+
+**Zorluk:** Kolay
+
+**Genişletme Fikirleri:**
+- Birden çok dildeki fişleri destekle (Gemini çok dillidir).
+- El yazısı notları ayrı bir alanda çıkar.
+- Şüpheli/okunamayan alanlar için güven skoru iste.
+
+**Başlangıç Kodu:**
+
+```python
+from google import genai
+from pydantic import BaseModel
+import os
+
+client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+
+class Kalem(BaseModel):
+    ad: str
+    adet: int
+    birim_fiyat: float
+
+class Fis(BaseModel):
+    satici: str
+    tarih: str
+    toplam: float
+    kdv: float
+    kalemler: list[Kalem]
+
+def fis_coz(gorsel_yolu: str) -> Fis:
+    gorsel = client.files.upload(file=gorsel_yolu)
+    yanit = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=[gorsel, "Bu fişteki alanları çıkar."],
+        config={
+            "response_mime_type": "application/json",
+            "response_schema": Fis,
+        },
+    )
+    return Fis.model_validate_json(yanit.text)
+
+print(fis_coz("fis.jpg"))
+```
+
+---
+
+## Proje 2 — YouTube Video / Uzun Ses Özetleyici
+
+**Amaç:** Bir YouTube bağlantısını veya uzun bir podcast ses dosyasını doğrudan Gemini'ye
+verip; bölümlere ayrılmış özet, zaman damgalı önemli anlar ve eyleme dönük çıkarımlar üreten
+ajan. Gemini'nin **video/ses dosyalarını doğrudan işleyebilmesi** sayesinde transkript adımı
+gerekmez.
+
+**Kullanılan Araçlar:**
+- `google-genai` — video/ses girdisi
+- Gemini File API — büyük medya yükleme
+
+**Adımlar:**
+
+1. YouTube URL'sini doğrudan `contents` içinde ver (Gemini destekler) veya ses dosyasını File API ile yükle.
+2. "Videoyu bölümlere ayır, her bölüm için zaman damgası + 2 cümle özet ver" yönergesini gönder.
+3. Zaman damgalı bölüm listesini ve genel özeti Markdown'a yaz.
+4. "Eyleme dönük çıkarımlar" bölümü ekle.
+5. Birden çok videoyu sırayla işleyip tek rapor üret.
+
+**Zorluk:** Kolay
+
+**Genişletme Fikirleri:**
+- Özetleri otomatik [Obsidian](/entegrasyonlar/obsidian)/Notion'a kaydet.
+- Konuşmacı ayrımı (diarization) iste.
+- Bölüm başına anahtar kelime/etiket çıkar.
+
+```python
+from google import genai
+import os
+
+client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+
+def video_ozetle(youtube_url: str) -> str:
+    yanit = client.models.generate_content(
+        model="gemini-2.5-pro",
+        contents=genai.types.Content(parts=[
+            genai.types.Part(file_data=genai.types.FileData(file_uri=youtube_url)),
+            genai.types.Part(text=(
+                "Bu videoyu Türkçe özetle. Bölümlere ayır; her bölüm için "
+                "[dakika:saniye] zaman damgası ve 2 cümle ver. Sonunda 'Eyleme "
+                "Dönük Çıkarımlar' başlığı altında 3 madde yaz."
+            )),
+        ]),
+    )
+    return yanit.text
+
+print(video_ozetle("https://www.youtube.com/watch?v=ORNEK"))
+```
+
+---
+
+## Proje 3 — Google Antigravity ile Full-Stack Uygulama Build
+
+**Amaç:** [Google Antigravity](/araclar/google-antigravity) (agentic IDE) kullanarak,
+doğal dil tarifinden başlayıp veritabanı + API + frontend içeren küçük bir tam-yığın
+uygulamayı uçtan uca ürettirmek. Ajanın tarayıcıyı sürerek (browser control) kendi
+ürettiği arayüzü doğrulamasını izlemek.
+
+**Kullanılan Araçlar:**
+- Google Antigravity (Gemini destekli agentic editör)
+- Tercihen bir starter şablon (örn. Next.js + SQLite)
+
+**Adımlar:**
+
+1. Antigravity'de yeni bir çalışma alanı (workspace) aç ve bir PRD/spec yaz.
+2. Ajanı plan moduna al; üreteceği mimariyi gözden geçir.
+3. Ajanın veritabanı şemasını, API uç noktalarını ve UI bileşenlerini üretmesini sağla.
+4. Antigravity'nin tarayıcı kontrolüyle akışı kendisinin test etmesini izle (Artifacts).
+5. Eksik kalan akışlar için ajanı yeniden yönlendir; sonucu git'e commit ettir.
+
+**Zorluk:** Orta
+
+**Genişletme Fikirleri:**
+- Aynı görevi [Claude Code](/araclar/claude-code) ile yapıp karşılaştır ([karşılaştırma](/karsilastirmalar/claude-code-vs-codex-vs-antigravity)).
+- Ajanın ürettiği test paketini CI'ya bağla.
+- Çok ajanlı (multi-agent) görev dağıtımını dene.
+
+<Callout type="ipucu">
+Antigravity, ajan işini "Artifacts" (yapay çıktılar) olarak belgeler. Build sonunda bu
+artefaktları inceleyerek ajanın hangi varsayımları yaptığını görmek, [planlama](/kavramlar/planning)
+becerinizi geliştirir.
+</Callout>
+
+---
+
+## Proje 4 — Google Search ile Temellendirilmiş (Grounded) Destek Botu
+
+**Amaç:** Şirketin güncel bilgileri (fiyatlar, durum sayfası, dokümanlar) hakkında soruları,
+**Google Search grounding** ve **function calling** ile yanıtlayan; uydurma (hallucination)
+oranı düşük bir müşteri destek ajanı.
+
+**Kullanılan Araçlar:**
+- `google-genai` — function calling + Google Search grounding aracı
+- Basit bir araç katmanı (sipariş durumu, stok sorgusu vb.)
+
+**Adımlar:**
+
+1. Gemini isteğine `google_search` aracını ekleyerek güncel web bilgisine eriştir.
+2. Şirkete özel fonksiyonları (`siparis_durumu`, `stok_sorgu`) [tool/function calling](/kavramlar/function-calling) olarak tanımla.
+3. Gemini'nin ne zaman arama ne zaman fonksiyon çağıracağına karar vermesini sağla.
+4. Yanıtlara kaynak (citation) bağlantıları ekle.
+5. Konuşma geçmişini tutarak çok turlu destek akışı kur.
+
+**Zorluk:** Orta
+
+**Genişletme Fikirleri:**
+- Yanıt güveni düşükse [insan onayına](/kavramlar/human-in-the-loop) düşür.
+- [Slack](/entegrasyonlar/slack) veya web widget'ı olarak yayınla.
+- Çok dilli destek ekle.
+
+---
+
+## Proje 5 — Gemini Live API ile Gerçek Zamanlı Sesli Asistan
+
+**Amaç:** Mikrofon girişini gerçek zamanlı dinleyip Gemini **Live API** üzerinden düşük
+gecikmeli sesli yanıt veren bir asistan. Kesintiye uğratılabilir (barge-in) doğal konuşma
+deneyimi.
+
+**Kullanılan Araçlar:**
+- `google-genai` — Live API (WebSocket tabanlı çift yönlü ses)
+- `pyaudio` / `sounddevice` — mikrofon ve hoparlör akışı
+
+**Adımlar:**
+
+1. Live API oturumu aç (model: `gemini-2.0-flash-live`).
+2. Mikrofon ses akışını parça parça (chunk) gönder.
+3. Gelen ses yanıtını gerçek zamanlı oynat.
+4. Kesintiye izin ver (kullanıcı konuşunca asistan durur).
+5. Bir araç (örn. takvim ekleme) bağlayarak sesle eylem tetikle.
+
+**Zorluk:** İleri
+
+**Genişletme Fikirleri:**
+- Telefon hattına (Twilio) bağla.
+- Ekran paylaşımı ile çok-modlu canlı yardım.
+- Türkçe ses tonu/persona ayarla.
+
+<Callout type="uyari">
+Live API gerçek zamanlı ses akışı tükettiği için maliyet ve gecikme önemlidir. Geliştirme
+sırasında kısa oturumlar kullanın; üretimde kullanım süresi sınırı koyun.
+</Callout>
+
+---
+
+**Sıradaki:** Aynı projeleri terminal tabanlı bir agentic araçla yapmak için
+[Claude Code ile Projeler](/projeler/claude-code-projeleri)'e, iki modeli birlikte
+kullanmak için [Gemini + Claude Code Birlikte](/projeler/gemini-claude-code-birlikte)
+sayfasına göz at.
